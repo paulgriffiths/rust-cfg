@@ -23,7 +23,7 @@ mod test {
     /// Helper function to read in an entire test data file
     pub fn read_test_file(filename: &str) -> String {
         let mut p = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        p.push(format!("src/testdata/{}", filename));
+        p.push(format!("tests/testdata/{}", filename));
 
         let filename = p
             .into_os_string()
