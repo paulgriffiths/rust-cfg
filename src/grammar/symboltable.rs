@@ -11,6 +11,8 @@ pub struct SymbolTable {
     symbols: Vec<Symbol>,
     terminals: HashMap<String, usize>,
     non_terminals: HashMap<String, usize>,
+    terminal_ids: Vec<usize>,
+    non_terminal_ids: Vec<usize>,
 }
 
 impl Default for SymbolTable {
@@ -26,6 +28,8 @@ impl SymbolTable {
             symbols: Vec::new(),
             terminals: HashMap::new(),
             non_terminals: HashMap::new(),
+            terminal_ids: Vec::new(),
+            non_terminal_ids: Vec::new(),
         }
     }
 
@@ -37,6 +41,7 @@ impl SymbolTable {
         } else {
             let index = self.len();
             self.terminals.insert(value.to_string(), index);
+            self.terminal_ids.push(index);
             self.symbols.push(Symbol::Terminal(value.to_string()));
             index
         }
@@ -51,6 +56,7 @@ impl SymbolTable {
         } else {
             let index = self.len();
             self.non_terminals.insert(value.to_string(), index);
+            self.non_terminal_ids.push(index);
             self.symbols.push(Symbol::NonTerminal(value.to_string()));
             index
         }
@@ -66,6 +72,11 @@ impl SymbolTable {
         self.symbols.len()
     }
 
+    /// Returns a sorted slice of the IDs of all non-terminals
+    pub fn non_terminal_ids(&self) -> &[usize] {
+        &self.non_terminal_ids
+    }
+
     /// Returns the string value of the non-terminal with the given ID. Panics
     /// if there is no non-terminal with the given ID in the symbol table.
     pub fn non_terminal_value(&self, i: usize) -> String {
@@ -75,6 +86,11 @@ impl SymbolTable {
                 panic!("symbol {} is a terminal", i);
             }
         }
+    }
+
+    /// Returns a sorted slice of the IDs of all terminals
+    pub fn terminal_ids(&self) -> &[usize] {
+        &self.terminal_ids
     }
 
     /// Returns the string value of the terminal with the given ID. Panics if
@@ -123,6 +139,22 @@ mod test {
         assert_eq!(table.add_non_terminal("a"), 2);
         assert!(!table.is_empty());
         assert_eq!(table.len(), 3);
+    }
+
+    #[test]
+    fn test_non_terminal_ids() {
+        let mut table = SymbolTable::new();
+        assert_eq!(table.add_non_terminal("a"), 0);
+        assert_eq!(table.add_non_terminal("b"), 1);
+        assert_eq!(table.add_terminal("a"), 2);
+        assert_eq!(table.add_non_terminal("c"), 3);
+        assert_eq!(table.add_terminal("b"), 4);
+        assert_eq!(table.add_terminal("c"), 5);
+        assert_eq!(table.add_non_terminal("c"), 3);
+        assert_eq!(table.add_terminal("b"), 4);
+
+        assert_eq!(table.non_terminal_ids(), &[0, 1, 3]);
+        assert_eq!(table.terminal_ids(), &[2, 4, 5]);
     }
 
     #[test]

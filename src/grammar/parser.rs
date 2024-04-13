@@ -3,6 +3,7 @@ use crate::grammar::lexer::Lexer;
 use crate::grammar::symboltable::SymbolTable;
 use crate::grammar::token::{Token, TokenInfo};
 use crate::grammar::{Production, Symbol};
+use std::collections::HashMap;
 
 /// A parser to parse a representation of a context-free grammar
 struct Parser {
@@ -16,6 +17,7 @@ struct Parser {
 pub struct ParserOutput {
     pub symbol_table: SymbolTable,
     pub productions: Vec<Production>,
+    pub nt_productions: HashMap<usize, Vec<usize>>,
 }
 
 /// Parses the given representation of a context-free grammar
@@ -26,9 +28,28 @@ pub fn parse(input: &str) -> Result<ParserOutput> {
     let symbol_table = parser.symbol_table;
     let productions = parser.productions;
 
+    // Generate map of productions for each non-terminal
+    let mut nt_productions: HashMap<usize, Vec<usize>> = HashMap::new();
+    for (i, prod) in productions.iter().enumerate() {
+        nt_productions
+            .entry(prod.head)
+            .and_modify(|v| v.push(i))
+            .or_insert(vec![i]);
+    }
+
+    // Ensure each non-terminal has at least one production
+    for i in symbol_table.non_terminal_ids().iter() {
+        if nt_productions.get(i).is_none() {
+            return Err(Error::NonTerminalNoProductions(
+                symbol_table.non_terminal_value(*i),
+            ));
+        }
+    }
+
     Ok(ParserOutput {
         symbol_table,
         productions,
+        nt_productions,
     })
 }
 
@@ -193,13 +214,56 @@ impl Parser {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::test::read_test_file;
+    use crate::test::{assert_error_text, read_test_file};
 
     #[test]
-    fn test_new() -> Result<()> {
+    fn test_from_file() -> Result<()> {
         let output = parse(&read_test_file("grammars/nlr_simple_expr.cfg"))?;
         assert_eq!(output.productions.len(), 37);
 
         Ok(())
+    }
+
+    #[test]
+    fn test_productions_for_non_terminal() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let output = parse(&read_test_file("grammars/nlr_simple_expr.cfg"))?;
+
+        assert_eq!(output.nt_productions.get(&0).unwrap().as_ref(), vec![0]); // E
+        assert_eq!(output.nt_productions.get(&1).unwrap().as_ref(), vec![3]); // T
+        assert_eq!(output.nt_productions.get(&2).unwrap().as_ref(), vec![1, 2]); // Er
+        assert_eq!(output.nt_productions.get(&4).unwrap().as_ref(), vec![6, 7]); // F
+        assert_eq!(output.nt_productions.get(&5).unwrap().as_ref(), vec![4, 5]); // Tr
+        assert_eq!(output.nt_productions.get(&9).unwrap().as_ref(), vec![8]); // ID
+        assert_eq!(
+            output.nt_productions.get(&11).unwrap().as_ref(),
+            vec![9, 10]
+        ); // IDr
+        assert_eq!(
+            output.nt_productions.get(&10).unwrap().as_ref(),
+            (11..37).collect::<Vec<usize>>()
+        ); // letter
+
+        // Verify the sum of the counts of all productions for non-terminals
+        // equals the count of all productions
+        let count: usize = output
+            .symbol_table
+            .non_terminal_ids()
+            .iter()
+            .map(|v| output.nt_productions.get(v).unwrap().len())
+            .sum();
+        assert_eq!(count, output.productions.len());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_parse_fails() {
+        assert_error_text(parse("|"), "expected non-terminal");
+        assert_error_text(parse("A"), "end of input");
+        assert_error_text(parse("A|"), "expected production symbol");
+        assert_error_text(parse("A→|"), "empty production body");
+        assert_error_text(parse("A→→"), "expected grammar symbol");
+        assert_error_text(parse("A→ϵB"), "ϵ-productions may not contain other symbols");
+        assert_error_text(parse("A→B"), "no productions found for non-terminal 'B'");
     }
 }
