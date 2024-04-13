@@ -1,6 +1,6 @@
 pub mod errors;
 pub mod grammar;
-pub mod lexer;
+mod lexer;
 pub mod parsers;
 pub mod position;
 mod symboltable;
