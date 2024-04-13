@@ -1,57 +1,61 @@
 use crate::errors::{Error, Result};
+use crate::position::Position;
 use std::fmt;
 
 /// A lexer for a context-free grammar parser
 pub struct Lexer {
     input: Vec<char>,
     cursor: usize,
-    current_line: usize,
-    current_pos: usize,
-    line_not_empty: bool,
+    position: Position,
+    production_started: bool,
+}
+
+/// An input character and its position within the input string
+struct InputInfo {
+    value: char,
+    position: Position,
+}
+
+impl InputInfo {
+    /// Returns the given token with accompanying position information
+    fn token(&self, token: Token) -> Option<TokenInfo> {
+        Some(TokenInfo {
+            token,
+            position: self.position,
+        })
+    }
 }
 
 #[derive(Debug, PartialEq)]
-/// A lexical token
+/// A lexical token for a context-free grammar
 pub enum Token {
-    NonTerminal(String),
-    Terminal(String),
-    ProductionSymbol,
-    Empty,
     Alternative,
+    Empty,
     EndOfProduction,
+    NonTerminal(String),
+    ProductionSymbol,
+    Terminal(String),
 }
 
 impl fmt::Display for Token {
     /// Formats the token using the given formatter
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Token::NonTerminal(s) => write!(f, "Non-Terminal({})", s),
-            Token::Terminal(s) => write!(f, "Terminal({})", s),
-            Token::ProductionSymbol => write!(f, "→"),
-            Token::Empty => write!(f, "ϵ"),
             Token::Alternative => write!(f, "|"),
+            Token::Empty => write!(f, "ϵ"),
             Token::EndOfProduction => write!(f, "\\n"),
+            Token::NonTerminal(s) => write!(f, "Non-Terminal({})", s),
+            Token::ProductionSymbol => write!(f, "→"),
+            Token::Terminal(s) => write!(f, "Terminal({})", s),
         }
     }
 }
 
 #[derive(Debug, PartialEq)]
+/// A lexical token with accompanying information
 pub struct TokenInfo {
     pub token: Token,
-    pub line: usize,
-    pub pos: usize,
-}
-
-struct InputInfo {
-    value: char,
-    line: usize,
-    pos: usize,
-}
-
-impl InputInfo {
-    fn token(&self, token: Token) -> Option<TokenInfo> {
-        Some(TokenInfo{token, line: self.line, pos: self.pos})
-    }
+    pub position: Position,
 }
 
 impl Lexer {
@@ -60,19 +64,22 @@ impl Lexer {
         Lexer {
             input: input.chars().collect(),
             cursor: 0,
-            current_line: 1,
-            current_pos: 1,
-            line_not_empty: false,
+            position: Position::new(),
+            production_started: false,
         }
     }
 
-    /// Reads and discards a comment through to the end of the line
+    /// Reads and discards characters from a comment character through to the
+    /// end of the line, if the lookahead is a comment character. Returns true
+    /// if a comment was detected and discarded.
     fn discard_comment(&mut self) -> bool {
+        // Do nothing if the lookahead character is not a comment character
         if self.lookahead() != Some('#') {
             return false;
         }
-
         self.read();
+
+        // Read any further characters through to the end of the line
         while let Some(lookahead) = self.lookahead() {
             if lookahead == '\n' {
                 break;
@@ -83,14 +90,18 @@ impl Lexer {
         true
     }
 
-    /// Reads and discards comments and whitespace characters, including
+    /// Reads and discards any comments and whitespace characters, including
     /// newlines. If a newline is encountered and the current line is not
     /// empty, an end-of-production token is returned.
     fn discard_comments_and_whitespace(&mut self) -> Option<TokenInfo> {
+        // Discard any leading whitespace first
         if let Some(token) = self.discard_whitespace() {
             return Some(token);
         }
 
+        // Iteratively discard comments as many times as we find them,
+        // including any whitespace at the beginning of a line following a
+        // comment
         while self.discard_comment() {
             if let Some(token) = self.discard_whitespace() {
                 return Some(token);
@@ -109,8 +120,14 @@ impl Lexer {
         while self.lookahead() == Some('\n') {
             let eol = self.read();
 
-            if self.line_not_empty {
-                self.line_not_empty = false;
+            // A production body is terminated either by an alternative lexeme,
+            // or by end-of-line, so if a production has already been started
+            // on the current line, return an end-of-production token. Otherwise,
+            // the entire current line consists of whitespace and/or comments
+            // and there is no production body to terminate, so proceed to the
+            // next line and continue discarding whitespace.
+            if self.production_started {
+                self.production_started = false;
                 return eol.token(Token::EndOfProduction);
             }
 
@@ -134,10 +151,10 @@ impl Lexer {
     /// Returns the lookahead character
     fn lookahead(&self) -> Option<char> {
         if self.cursor >= self.input.len() {
-            return None;
+            None
+        } else {
+            Some(self.input[self.cursor])
         }
-
-        Some(self.input[self.cursor])
     }
 
     /// Reads the next character and returns an error on end-of-input or if
@@ -152,72 +169,77 @@ impl Lexer {
 
     /// Returns the next lexical token, if any
     pub fn next_token(&mut self) -> Result<Option<TokenInfo>> {
+        // Discard comments and whitespace first, so that this method always
+        // returns a token or end-of-input
         if let Some(token) = self.discard_comments_and_whitespace() {
+            // We have an end-of-production token if we get here
             return Ok(Some(token));
         }
 
         let Some(lookahead) = self.lookahead() else {
+            // End of input
             return Ok(None);
         };
 
-        self.line_not_empty = true;
+        // If we've discarded all comments and whitespace and we're not at
+        // end-of-input, we must have some tokens for a production, so record
+        // that fact so we can generate an end-of-production token later if
+        // we see a newline
+        self.production_started = true;
 
         match lookahead {
-            '|' => {
-                return Ok(self.read().token(Token::Alternative));
-            }
-            '_' | 'ε' | 'ϵ' => {
-                return Ok(self.read().token(Token::Empty));
-            }
-            '→' => {
-                return Ok(self.read().token(Token::ProductionSymbol));
-            }
+            // The epsilon characters we're accepting for an empty production
+            // body match is_alphabetic(), so we need to check for them before
+            // we check for non-terminals
+            '_' | 'ε' | 'ϵ' => Ok(self.read().token(Token::Empty)),
+            '|' => Ok(self.read().token(Token::Alternative)),
+            '→' => Ok(self.read().token(Token::ProductionSymbol)),
             ':' => {
                 let initial = self.match_char(':')?;
                 self.match_char(':')?;
                 self.match_char('=')?;
-                return Ok(initial.token(Token::ProductionSymbol));
+                Ok(initial.token(Token::ProductionSymbol))
             }
-            '\'' | '"' => {
-                return self.lex_terminal();
-            }
-            _ => (),
+            '\'' | '"' => self.lex_terminal(),
+            _ if lookahead.is_alphabetic() => self.lex_non_terminal(),
+            _ => Err(Error::UnexpectedChar(lookahead)),
         }
-
-        if lookahead.is_alphabetic() {
-            return self.lex_non_terminal();
-        }
-
-        Err(Error::UnexpectedChar(lookahead))
     }
 
-    /// Lexes a non-terminal, which is any sequence of alphabetic characters
+    /// Lexes a non-terminal, which is any sequence of alphabetic characters,
+    /// except a sequence beginning with any of the alphabetic characters we're
+    /// accepting as an empty production body
     fn lex_non_terminal(&mut self) -> Result<Option<TokenInfo>> {
         let initial = self.read();
         let mut non_terminal = vec![initial.value];
 
         while let Some(lookahead) = self.lookahead() {
-            if !(lookahead.is_alphabetic()) {
+            if !lookahead.is_alphabetic() {
                 break;
             }
             non_terminal.push(self.read().value);
         }
 
-        return Ok(initial.token(Token::NonTerminal(non_terminal.into_iter().collect())));
+        Ok(initial.token(Token::NonTerminal(non_terminal.into_iter().collect())))
     }
 
     /// Lexes a terminal, which is any single- or double-quoted string. Quotes,
     /// backslashes, and newlines, carriage returns and tabs may be escaped.
     fn lex_terminal(&mut self) -> Result<Option<TokenInfo>> {
-        let mut terminal = vec![];
+        let initial = self.read();
         let mut is_escape = false;
 
-        let initial = self.read();
+        // We don't store the beginning or ending quote characters in the
+        // value of the terminal
+        let mut terminal = vec![];
 
         while self.lookahead().is_some() {
             let c = self.read();
 
             if is_escape {
+                is_escape = false;
+
+                // Process escape characters
                 match c.value {
                     '\\' | '\'' | '"' => {
                         terminal.push(c.value);
@@ -235,26 +257,29 @@ impl Lexer {
                         return Err(Error::UnrecognizedEscapeChar(c.value));
                     }
                 }
-
-                is_escape = false;
             } else {
                 match c.value {
                     '\\' => {
+                        // Backslash begins an escape character
                         is_escape = true;
                     }
                     '\n' => {
+                        // We don't allow terminals to span multiple lines
                         return Err(Error::UnterminatedTerminal);
                     }
                     _ if c.value == initial.value => {
+                        // We've reached the terminating quote character, so return the terminal
                         return Ok(initial.token(Token::Terminal(terminal.into_iter().collect())));
                     }
                     _ => {
+                        // Otherwise, read the character into the terminal
                         terminal.push(c.value);
                     }
                 }
             }
         }
 
+        // End-of-input and we haven't seen a terminating quote character yet
         Err(Error::UnterminatedTerminal)
     }
 
@@ -264,17 +289,10 @@ impl Lexer {
     fn read(&mut self) -> InputInfo {
         let info = InputInfo {
             value: self.input[self.cursor],
-            line: self.current_line,
-            pos: self.current_pos,
+            position: self.position,
         };
 
-        if info.value == '\n' {
-            self.current_pos = 1;
-            self.current_line += 1;
-        } else {
-            self.current_pos += 1;
-        }
-
+        self.position.advance(info.value == '\n');
         self.cursor += 1;
 
         info
@@ -293,56 +311,70 @@ mod test {
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::NonTerminal(String::from("A")),
-                line: 3,
-                pos: 2
+                position: Position {
+                    line: 3,
+                    position: 2
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::NonTerminal(String::from("B")),
-                line: 3,
-                pos: 4
+                position: Position {
+                    line: 3,
+                    position: 4
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::EndOfProduction,
-                line: 3,
-                pos: 14
+                position: Position {
+                    line: 3,
+                    position: 14
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::NonTerminal(String::from("C")),
-                line: 4,
-                pos: 1
+                position: Position {
+                    line: 4,
+                    position: 1
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::NonTerminal(String::from("D")),
-                line: 4,
-                pos: 3
+                position: Position {
+                    line: 4,
+                    position: 3
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::EndOfProduction,
-                line: 4,
-                pos: 4
+                position: Position {
+                    line: 4,
+                    position: 4
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::NonTerminal(String::from("E")),
-                line: 7,
-                pos: 1
+                position: Position {
+                    line: 7,
+                    position: 1
+                },
             })
         );
         assert_eq!(lex.next_token()?, None);
@@ -360,40 +392,50 @@ mod test {
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::NonTerminal(String::from("E")),
-                line: 5,
-                pos: 1
+                position: Position {
+                    line: 5,
+                    position: 1
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::ProductionSymbol,
-                line: 5,
-                pos: 8
+                position: Position {
+                    line: 5,
+                    position: 8
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::NonTerminal(String::from("T")),
-                line: 5,
-                pos: 10
+                position: Position {
+                    line: 5,
+                    position: 10
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::NonTerminal(String::from("Er")),
-                line: 5,
-                pos: 12
+                position: Position {
+                    line: 5,
+                    position: 12
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::EndOfProduction,
-                line: 5,
-                pos: 14
+                position: Position {
+                    line: 5,
+                    position: 14
+                },
             })
         );
 
@@ -407,88 +449,110 @@ mod test {
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::NonTerminal(String::from("A")),
-                line: 1,
-                pos: 1
+                position: Position {
+                    line: 1,
+                    position: 1
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::ProductionSymbol,
-                line: 1,
-                pos: 3
+                position: Position {
+                    line: 1,
+                    position: 3
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::NonTerminal(String::from("B")),
-                line: 1,
-                pos: 5
+                position: Position {
+                    line: 1,
+                    position: 5
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::Terminal(String::from("c")),
-                line: 1,
-                pos: 7
+                position: Position {
+                    line: 1,
+                    position: 7
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::NonTerminal(String::from("D")),
-                line: 1,
-                pos: 11
+                position: Position {
+                    line: 1,
+                    position: 11
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::Alternative,
-                line: 1,
-                pos: 13
+                position: Position {
+                    line: 1,
+                    position: 13
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::Terminal(String::from("e")),
-                line: 1,
-                pos: 15
+                position: Position {
+                    line: 1,
+                    position: 15
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::NonTerminal(String::from("F")),
-                line: 1,
-                pos: 19
+                position: Position {
+                    line: 1,
+                    position: 19
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::Terminal(String::from("g")),
-                line: 1,
-                pos: 21
+                position: Position {
+                    line: 1,
+                    position: 21
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::Alternative,
-                line: 1,
-                pos: 25
+                position: Position {
+                    line: 1,
+                    position: 25
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::Empty,
-                line: 1,
-                pos: 27
+                position: Position {
+                    line: 1,
+                    position: 27
+                },
             })
         );
         assert_eq!(lex.next_token()?, None);
@@ -506,112 +570,140 @@ mod test {
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::NonTerminal(String::from("A")),
-                line: 4,
-                pos: 2
+                position: Position {
+                    line: 4,
+                    position: 2
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::ProductionSymbol,
-                line: 4,
-                pos: 4
+                position: Position {
+                    line: 4,
+                    position: 4
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::NonTerminal(String::from("B")),
-                line: 4,
-                pos: 6
+                position: Position {
+                    line: 4,
+                    position: 6
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::Alternative,
-                line: 4,
-                pos: 8
+                position: Position {
+                    line: 4,
+                    position: 8
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::NonTerminal(String::from("C")),
-                line: 4,
-                pos: 10
+                position: Position {
+                    line: 4,
+                    position: 10
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::EndOfProduction,
-                line: 4,
-                pos: 12
+                position: Position {
+                    line: 4,
+                    position: 12
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::Alternative,
-                line: 5,
-                pos: 2
+                position: Position {
+                    line: 5,
+                    position: 2
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::NonTerminal(String::from("D")),
-                line: 5,
-                pos: 4
+                position: Position {
+                    line: 5,
+                    position: 4
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::Alternative,
-                line: 5,
-                pos: 6
+                position: Position {
+                    line: 5,
+                    position: 6
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::NonTerminal(String::from("E")),
-                line: 5,
-                pos: 8
+                position: Position {
+                    line: 5,
+                    position: 8
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::EndOfProduction,
-                line: 5,
-                pos: 10
+                position: Position {
+                    line: 5,
+                    position: 10
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::NonTerminal(String::from("A")),
-                line: 7,
-                pos: 2
+                position: Position {
+                    line: 7,
+                    position: 2
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::ProductionSymbol,
-                line: 7,
-                pos: 4
+                position: Position {
+                    line: 7,
+                    position: 4
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::Empty,
-                line: 7,
-                pos: 6
+                position: Position {
+                    line: 7,
+                    position: 6
+                },
             })
         );
         assert_eq!(lex.next_token()?, None);
@@ -643,40 +735,50 @@ mod test {
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::NonTerminal(String::from("a")),
-                line: 1,
-                pos: 1
+                position: Position {
+                    line: 1,
+                    position: 1
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::NonTerminal(String::from("B")),
-                line: 1,
-                pos: 3
+                position: Position {
+                    line: 1,
+                    position: 3
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::NonTerminal(String::from("cde")),
-                line: 1,
-                pos: 5
+                position: Position {
+                    line: 1,
+                    position: 5
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::NonTerminal(String::from("FGH")),
-                line: 1,
-                pos: 9
+                position: Position {
+                    line: 1,
+                    position: 9
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::NonTerminal(String::from("sIbErIaNhAmStEr")),
-                line: 1,
-                pos: 13
+                position: Position {
+                    line: 1,
+                    position: 13
+                },
             })
         );
         assert_eq!(lex.next_token()?, None);
@@ -691,48 +793,60 @@ mod test {
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::ProductionSymbol,
-                line: 1,
-                pos: 1
+                position: Position {
+                    line: 1,
+                    position: 1
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::ProductionSymbol,
-                line: 1,
-                pos: 3
+                position: Position {
+                    line: 1,
+                    position: 3
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::Empty,
-                line: 1,
-                pos: 7
+                position: Position {
+                    line: 1,
+                    position: 7
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::Empty,
-                line: 1,
-                pos: 9
+                position: Position {
+                    line: 1,
+                    position: 9
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::Empty,
-                line: 1,
-                pos: 11
+                position: Position {
+                    line: 1,
+                    position: 11
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::Alternative,
-                line: 1,
-                pos: 13
+                position: Position {
+                    line: 1,
+                    position: 13
+                },
             })
         );
         assert_eq!(lex.next_token()?, None);
@@ -747,40 +861,50 @@ mod test {
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::Terminal(String::from("a")),
-                line: 1,
-                pos: 1
+                position: Position {
+                    line: 1,
+                    position: 1
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::Terminal(String::from("b")),
-                line: 1,
-                pos: 5
+                position: Position {
+                    line: 1,
+                    position: 5
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::Terminal(String::from(r#""c""#)),
-                line: 1,
-                pos: 9
+                position: Position {
+                    line: 1,
+                    position: 9
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::Terminal(String::from("'d'")),
-                line: 1,
-                pos: 15
+                position: Position {
+                    line: 1,
+                    position: 15
+                },
             })
         );
         assert_eq!(
             lex.next_token()?,
             Some(TokenInfo {
                 token: Token::Terminal(String::from("e\\\t\r\nf")),
-                line: 1,
-                pos: 21
+                position: Position {
+                    line: 1,
+                    position: 21
+                },
             })
         );
         assert_eq!(lex.next_token()?, None);

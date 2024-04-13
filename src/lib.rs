@@ -1,6 +1,7 @@
 pub mod errors;
 pub mod grammar;
 pub mod lexer;
+pub mod position;
 
 #[cfg(test)]
 mod test {
