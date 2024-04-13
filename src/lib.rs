@@ -3,6 +3,7 @@ pub mod grammar;
 mod lexer;
 pub mod parsers;
 pub mod position;
+pub mod symbols;
 mod symboltable;
 
 #[cfg(test)]

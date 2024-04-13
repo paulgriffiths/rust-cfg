@@ -1,9 +1,5 @@
+use crate::symbols::Symbol;
 use std::collections::HashMap;
-
-pub enum Symbol {
-    Terminal(String),
-    NonTerminal(String),
-}
 
 pub struct SymbolTable {
     symbols: Vec<Symbol>,
@@ -72,6 +68,10 @@ impl SymbolTable {
             Symbol::Terminal(_) => {
                 panic!("symbol {} is a terminal", i);
             }
+            Symbol::Empty => {
+                // Shouldn't ever happen
+                panic!("symbol {} is empty", i);
+            }
         }
     }
 
@@ -82,6 +82,10 @@ impl SymbolTable {
             Symbol::Terminal(s) => s.clone(),
             Symbol::NonTerminal(_) => {
                 panic!("symbol {} is a non-terminal", i);
+            }
+            Symbol::Empty => {
+                // Shouldn't ever happen
+                panic!("symbol {} is empty", i);
             }
         }
     }
