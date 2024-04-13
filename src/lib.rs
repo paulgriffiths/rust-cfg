@@ -5,10 +5,9 @@ pub mod lexer;
 #[cfg(test)]
 mod test {
     use crate::errors::Result;
-    use crate::lexer::Token;
 
     /// Helper function to verify the text of an error
-    pub fn assert_error_text(result: Result<Option<Token>>, want: &str) {
+    pub fn assert_error_text<T>(result: Result<T>, want: &str) {
         match result {
             Err(e) => {
                 assert_eq!(e.to_string(), want);
