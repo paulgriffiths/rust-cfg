@@ -226,7 +226,12 @@ impl Lexer {
                         return Err(Error::UnterminatedTerminal);
                     }
                     _ if c.value == initial.value => {
-                        // We've reached the terminating quote character, so return the terminal
+                        // We've reached the terminating quote character, so
+                        // return the terminal provided it's non-empty
+                        if terminal.is_empty() {
+                            return Err(Error::EmptyTerminal);
+                        }
+
                         let s: String = terminal.into_iter().collect();
                         return Ok(initial.token(Token::Terminal(symbol_table.add_terminal(&s))));
                     }
@@ -942,6 +947,9 @@ mod test {
     #[test]
     fn test_terminals_fail() -> Result<()> {
         let mut table = SymbolTable::new();
+
+        let mut lex = Lexer::new("''");
+        assert_error_text(lex.next_token(&mut table), "empty terminal");
 
         let mut lex = Lexer::new("'string not closed");
         assert_error_text(lex.next_token(&mut table), "unterminated terminal");
