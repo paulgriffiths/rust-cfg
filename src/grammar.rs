@@ -1,6 +1,10 @@
+mod input_info;
+mod lexer;
 mod parser;
+mod symboltable;
+mod token;
 use crate::errors::Result;
-use crate::symboltable::SymbolTable;
+use symboltable::SymbolTable;
 
 /// A context-free grammar symbol
 pub enum Symbol {

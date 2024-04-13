@@ -1,8 +1,8 @@
 use crate::errors::{Error, Result};
+use crate::grammar::lexer::Lexer;
+use crate::grammar::symboltable::SymbolTable;
+use crate::grammar::token::{Token, TokenInfo};
 use crate::grammar::{Production, Symbol};
-use crate::lexer::Lexer;
-use crate::lexer::{Token, TokenInfo};
-use crate::symboltable::SymbolTable;
 
 /// A parser to parse a representation of a context-free grammar
 struct Parser {

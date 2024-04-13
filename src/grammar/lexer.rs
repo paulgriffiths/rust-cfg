@@ -1,11 +1,8 @@
-mod input_info;
-mod token;
-
 use crate::errors::{Error, Result};
+use crate::grammar::input_info::InputInfo;
+use crate::grammar::symboltable::SymbolTable;
+use crate::grammar::token::{Token, TokenInfo};
 use crate::position::Position;
-use crate::symboltable::SymbolTable;
-use input_info::InputInfo;
-pub use token::{Token, TokenInfo};
 
 /// A lexer for a context-free grammar parser
 pub struct Lexer {
