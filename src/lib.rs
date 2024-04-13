@@ -20,11 +20,15 @@ mod test {
         }
     }
 
-    pub fn test_file(filename: &str) -> String {
-        let mut d = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        d.push(format!("src/testdata/{}", filename));
+    /// Helper function to read in an entire test data file
+    pub fn read_test_file(filename: &str) -> String {
+        let mut p = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        p.push(format!("src/testdata/{}", filename));
 
-        let f = d.into_os_string().into_string().expect("boo");
-        std::fs::read_to_string(f).expect("failed to read test file")
+        let filename = p
+            .into_os_string()
+            .into_string()
+            .expect("failed to build filename");
+        std::fs::read_to_string(filename).expect("failed to read test file")
     }
 }

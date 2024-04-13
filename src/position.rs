@@ -32,3 +32,59 @@ impl Default for Position {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_advance() {
+        let mut p = Position::new();
+        assert_eq!(
+            p,
+            Position {
+                line: 1,
+                position: 1
+            }
+        );
+
+        p.advance(false);
+        assert_eq!(
+            p,
+            Position {
+                line: 1,
+                position: 2
+            }
+        );
+
+        p.advance(true);
+        assert_eq!(
+            p,
+            Position {
+                line: 2,
+                position: 1
+            }
+        );
+
+        p.advance(false);
+        assert_eq!(
+            p,
+            Position {
+                line: 2,
+                position: 2
+            }
+        );
+    }
+
+    #[test]
+    fn test_default() {
+        let p: Position = Default::default();
+        assert_eq!(
+            p,
+            Position {
+                line: 1,
+                position: 1
+            }
+        );
+    }
+}

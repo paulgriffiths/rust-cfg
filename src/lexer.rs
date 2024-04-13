@@ -1,6 +1,10 @@
+mod input_info;
+mod token;
+
 use crate::errors::{Error, Result};
 use crate::position::Position;
-use std::fmt;
+use input_info::InputInfo;
+pub use token::{Token, TokenInfo};
 
 /// A lexer for a context-free grammar parser
 pub struct Lexer {
@@ -8,54 +12,6 @@ pub struct Lexer {
     cursor: usize,
     position: Position,
     production_started: bool,
-}
-
-/// An input character and its position within the input string
-struct InputInfo {
-    value: char,
-    position: Position,
-}
-
-impl InputInfo {
-    /// Returns the given token with accompanying position information
-    fn token(&self, token: Token) -> Option<TokenInfo> {
-        Some(TokenInfo {
-            token,
-            position: self.position,
-        })
-    }
-}
-
-#[derive(Debug, PartialEq)]
-/// A lexical token for a context-free grammar
-pub enum Token {
-    Alternative,
-    Empty,
-    EndOfProduction,
-    NonTerminal(String),
-    ProductionSymbol,
-    Terminal(String),
-}
-
-impl fmt::Display for Token {
-    /// Formats the token using the given formatter
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Token::Alternative => write!(f, "|"),
-            Token::Empty => write!(f, "ϵ"),
-            Token::EndOfProduction => write!(f, "\\n"),
-            Token::NonTerminal(s) => write!(f, "Non-Terminal({})", s),
-            Token::ProductionSymbol => write!(f, "→"),
-            Token::Terminal(s) => write!(f, "Terminal({})", s),
-        }
-    }
-}
-
-#[derive(Debug, PartialEq)]
-/// A lexical token with accompanying information
-pub struct TokenInfo {
-    pub token: Token,
-    pub position: Position,
 }
 
 impl Lexer {
@@ -287,11 +243,7 @@ impl Lexer {
     /// at end of input. This will panic if end of input is reached, so the
     /// caller should usually ensure the lookahead is valid.
     fn read(&mut self) -> InputInfo {
-        let info = InputInfo {
-            value: self.input[self.cursor],
-            position: self.position,
-        };
-
+        let info = InputInfo::new(self.input[self.cursor], self.position);
         self.position.advance(info.value == '\n');
         self.cursor += 1;
 
@@ -302,7 +254,7 @@ impl Lexer {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::test::{assert_error_text, test_file};
+    use crate::test::{assert_error_text, read_test_file};
 
     #[test]
     fn test_comments() -> Result<()> {
@@ -384,8 +336,7 @@ mod test {
 
     #[test]
     fn test_grammar_file() -> Result<()> {
-        let data = test_file("grammars/nlr_simple_expr.cfg");
-        let mut lex = Lexer::new(&data);
+        let mut lex = Lexer::new(&read_test_file("grammars/nlr_simple_expr.cfg"));
 
         // Just verify the first production
         assert_eq!(
