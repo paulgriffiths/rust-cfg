@@ -1,7 +1,7 @@
 use crate::position::Position;
 use std::fmt;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 /// A lexical token with accompanying information
 pub struct TokenInfo {
     pub token: Token,
@@ -17,6 +17,20 @@ pub enum Token {
     NonTerminal(usize),
     ProductionSymbol,
     Terminal(usize),
+}
+
+impl Clone for Token {
+    /// Clones a token
+    fn clone(&self) -> Token {
+        match self {
+            Token::NonTerminal(i) => Token::NonTerminal(*i),
+            Token::Terminal(i) => Token::Terminal(*i),
+            Token::Alternative => Token::Alternative,
+            Token::Empty => Token::Empty,
+            Token::EndOfProduction => Token::EndOfProduction,
+            Token::ProductionSymbol => Token::ProductionSymbol,
+        }
+    }
 }
 
 impl fmt::Display for Token {

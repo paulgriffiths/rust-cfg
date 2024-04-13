@@ -1,6 +1,12 @@
-use crate::symbols::Symbol;
 use std::collections::HashMap;
 
+/// A reference entry in the symbol table
+enum Symbol {
+    Terminal(String),
+    NonTerminal(String),
+}
+
+/// A symbol table to contain terminal and non-terminal grammar symbols
 pub struct SymbolTable {
     symbols: Vec<Symbol>,
     terminals: HashMap<String, usize>,
@@ -68,10 +74,6 @@ impl SymbolTable {
             Symbol::Terminal(_) => {
                 panic!("symbol {} is a terminal", i);
             }
-            Symbol::Empty => {
-                // Shouldn't ever happen
-                panic!("symbol {} is empty", i);
-            }
         }
     }
 
@@ -82,10 +84,6 @@ impl SymbolTable {
             Symbol::Terminal(s) => s.clone(),
             Symbol::NonTerminal(_) => {
                 panic!("symbol {} is a non-terminal", i);
-            }
-            Symbol::Empty => {
-                // Shouldn't ever happen
-                panic!("symbol {} is empty", i);
             }
         }
     }

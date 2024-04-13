@@ -361,7 +361,7 @@ mod test {
             Some(TokenInfo {
                 token: Token::NonTerminal(0),
                 position: Position {
-                    line: 5,
+                    line: 7,
                     position: 1
                 },
             })
@@ -371,7 +371,7 @@ mod test {
             Some(TokenInfo {
                 token: Token::ProductionSymbol,
                 position: Position {
-                    line: 5,
+                    line: 7,
                     position: 8
                 },
             })
@@ -381,7 +381,7 @@ mod test {
             Some(TokenInfo {
                 token: Token::NonTerminal(1),
                 position: Position {
-                    line: 5,
+                    line: 7,
                     position: 10
                 },
             })
@@ -391,7 +391,7 @@ mod test {
             Some(TokenInfo {
                 token: Token::NonTerminal(2),
                 position: Position {
-                    line: 5,
+                    line: 7,
                     position: 12
                 },
             })
@@ -401,7 +401,7 @@ mod test {
             Some(TokenInfo {
                 token: Token::EndOfProduction,
                 position: Position {
-                    line: 5,
+                    line: 7,
                     position: 14
                 },
             })
