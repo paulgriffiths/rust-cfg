@@ -3,6 +3,7 @@ mod token;
 
 use crate::errors::{Error, Result};
 use crate::position::Position;
+use crate::symboltable::SymbolTable;
 use input_info::InputInfo;
 pub use token::{Token, TokenInfo};
 
@@ -124,7 +125,7 @@ impl Lexer {
     }
 
     /// Returns the next lexical token, if any
-    pub fn next_token(&mut self) -> Result<Option<TokenInfo>> {
+    pub fn next_token(&mut self, symbol_table: &mut SymbolTable) -> Result<Option<TokenInfo>> {
         // Discard comments and whitespace first, so that this method always
         // returns a token or end-of-input
         if let Some(token) = self.discard_comments_and_whitespace() {
@@ -156,8 +157,8 @@ impl Lexer {
                 self.match_char('=')?;
                 Ok(initial.token(Token::ProductionSymbol))
             }
-            '\'' | '"' => self.lex_terminal(),
-            _ if lookahead.is_alphabetic() => self.lex_non_terminal(),
+            '\'' | '"' => self.lex_terminal(symbol_table),
+            _ if lookahead.is_alphabetic() => self.lex_non_terminal(symbol_table),
             _ => Err(Error::UnexpectedChar(lookahead)),
         }
     }
@@ -165,7 +166,7 @@ impl Lexer {
     /// Lexes a non-terminal, which is any sequence of alphabetic characters,
     /// except a sequence beginning with any of the alphabetic characters we're
     /// accepting as an empty production body
-    fn lex_non_terminal(&mut self) -> Result<Option<TokenInfo>> {
+    fn lex_non_terminal(&mut self, symbol_table: &mut SymbolTable) -> Result<Option<TokenInfo>> {
         let initial = self.read();
         let mut non_terminal = vec![initial.value];
 
@@ -176,12 +177,13 @@ impl Lexer {
             non_terminal.push(self.read().value);
         }
 
-        Ok(initial.token(Token::NonTerminal(non_terminal.into_iter().collect())))
+        let s: String = non_terminal.into_iter().collect();
+        Ok(initial.token(Token::NonTerminal(symbol_table.add_non_terminal(&s))))
     }
 
     /// Lexes a terminal, which is any single- or double-quoted string. Quotes,
     /// backslashes, and newlines, carriage returns and tabs may be escaped.
-    fn lex_terminal(&mut self) -> Result<Option<TokenInfo>> {
+    fn lex_terminal(&mut self, symbol_table: &mut SymbolTable) -> Result<Option<TokenInfo>> {
         let initial = self.read();
         let mut is_escape = false;
 
@@ -225,7 +227,8 @@ impl Lexer {
                     }
                     _ if c.value == initial.value => {
                         // We've reached the terminating quote character, so return the terminal
-                        return Ok(initial.token(Token::Terminal(terminal.into_iter().collect())));
+                        let s: String = terminal.into_iter().collect();
+                        return Ok(initial.token(Token::Terminal(symbol_table.add_terminal(&s))));
                     }
                     _ => {
                         // Otherwise, read the character into the terminal
@@ -258,11 +261,12 @@ mod test {
 
     #[test]
     fn test_comments() -> Result<()> {
+        let mut table = SymbolTable::new();
         let mut lex = Lexer::new(" #comment \n #comment \n A B #comment\nC D\n\n#comment\nE");
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
-                token: Token::NonTerminal(String::from("A")),
+                token: Token::NonTerminal(0),
                 position: Position {
                     line: 3,
                     position: 2
@@ -270,9 +274,9 @@ mod test {
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
-                token: Token::NonTerminal(String::from("B")),
+                token: Token::NonTerminal(1),
                 position: Position {
                     line: 3,
                     position: 4
@@ -280,7 +284,7 @@ mod test {
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
                 token: Token::EndOfProduction,
                 position: Position {
@@ -290,9 +294,9 @@ mod test {
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
-                token: Token::NonTerminal(String::from("C")),
+                token: Token::NonTerminal(2),
                 position: Position {
                     line: 4,
                     position: 1
@@ -300,9 +304,9 @@ mod test {
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
-                token: Token::NonTerminal(String::from("D")),
+                token: Token::NonTerminal(3),
                 position: Position {
                     line: 4,
                     position: 3
@@ -310,7 +314,7 @@ mod test {
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
                 token: Token::EndOfProduction,
                 position: Position {
@@ -320,16 +324,23 @@ mod test {
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
-                token: Token::NonTerminal(String::from("E")),
+                token: Token::NonTerminal(4),
                 position: Position {
                     line: 7,
                     position: 1
                 },
             })
         );
-        assert_eq!(lex.next_token()?, None);
+        assert_eq!(lex.next_token(&mut table)?, None);
+
+        assert_eq!(table.len(), 5);
+        assert_eq!(table.non_terminal_value(0), "A");
+        assert_eq!(table.non_terminal_value(1), "B");
+        assert_eq!(table.non_terminal_value(2), "C");
+        assert_eq!(table.non_terminal_value(3), "D");
+        assert_eq!(table.non_terminal_value(4), "E");
 
         Ok(())
     }
@@ -337,12 +348,13 @@ mod test {
     #[test]
     fn test_grammar_file() -> Result<()> {
         let mut lex = Lexer::new(&read_test_file("grammars/nlr_simple_expr.cfg"));
+        let mut table = SymbolTable::new();
 
         // Just verify the first production
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
-                token: Token::NonTerminal(String::from("E")),
+                token: Token::NonTerminal(0),
                 position: Position {
                     line: 5,
                     position: 1
@@ -350,7 +362,7 @@ mod test {
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
                 token: Token::ProductionSymbol,
                 position: Position {
@@ -360,9 +372,9 @@ mod test {
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
-                token: Token::NonTerminal(String::from("T")),
+                token: Token::NonTerminal(1),
                 position: Position {
                     line: 5,
                     position: 10
@@ -370,9 +382,9 @@ mod test {
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
-                token: Token::NonTerminal(String::from("Er")),
+                token: Token::NonTerminal(2),
                 position: Position {
                     line: 5,
                     position: 12
@@ -380,7 +392,7 @@ mod test {
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
                 token: Token::EndOfProduction,
                 position: Position {
@@ -390,16 +402,22 @@ mod test {
             })
         );
 
+        assert_eq!(table.len(), 3);
+        assert_eq!(table.non_terminal_value(0), "E");
+        assert_eq!(table.non_terminal_value(1), "T");
+        assert_eq!(table.non_terminal_value(2), "Er");
+
         Ok(())
     }
 
     #[test]
     fn test_mixed() -> Result<()> {
-        let mut lex = Lexer::new("A → B 'c' D | 'e' F 'g' | ϵ");
+        let mut lex = Lexer::new("A → B 'c' D | 'e' D 'c' | ϵ");
+        let mut table = SymbolTable::new();
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
-                token: Token::NonTerminal(String::from("A")),
+                token: Token::NonTerminal(0),
                 position: Position {
                     line: 1,
                     position: 1
@@ -407,7 +425,7 @@ mod test {
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
                 token: Token::ProductionSymbol,
                 position: Position {
@@ -417,9 +435,9 @@ mod test {
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
-                token: Token::NonTerminal(String::from("B")),
+                token: Token::NonTerminal(1),
                 position: Position {
                     line: 1,
                     position: 5
@@ -427,9 +445,9 @@ mod test {
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
-                token: Token::Terminal(String::from("c")),
+                token: Token::Terminal(2),
                 position: Position {
                     line: 1,
                     position: 7
@@ -437,9 +455,9 @@ mod test {
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
-                token: Token::NonTerminal(String::from("D")),
+                token: Token::NonTerminal(3),
                 position: Position {
                     line: 1,
                     position: 11
@@ -447,7 +465,7 @@ mod test {
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
                 token: Token::Alternative,
                 position: Position {
@@ -457,9 +475,9 @@ mod test {
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
-                token: Token::Terminal(String::from("e")),
+                token: Token::Terminal(4),
                 position: Position {
                     line: 1,
                     position: 15
@@ -467,9 +485,9 @@ mod test {
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
-                token: Token::NonTerminal(String::from("F")),
+                token: Token::NonTerminal(3),
                 position: Position {
                     line: 1,
                     position: 19
@@ -477,9 +495,9 @@ mod test {
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
-                token: Token::Terminal(String::from("g")),
+                token: Token::Terminal(2),
                 position: Position {
                     line: 1,
                     position: 21
@@ -487,7 +505,7 @@ mod test {
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
                 token: Token::Alternative,
                 position: Position {
@@ -497,7 +515,7 @@ mod test {
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
                 token: Token::Empty,
                 position: Position {
@@ -506,10 +524,17 @@ mod test {
                 },
             })
         );
-        assert_eq!(lex.next_token()?, None);
+        assert_eq!(lex.next_token(&mut table)?, None);
 
         // Call next again to verify we still get None
-        assert_eq!(lex.next_token()?, None);
+        assert_eq!(lex.next_token(&mut table)?, None);
+
+        assert_eq!(table.len(), 5);
+        assert_eq!(table.non_terminal_value(0), "A");
+        assert_eq!(table.non_terminal_value(1), "B");
+        assert_eq!(table.terminal_value(2), "c");
+        assert_eq!(table.non_terminal_value(3), "D");
+        assert_eq!(table.terminal_value(4), "e");
 
         Ok(())
     }
@@ -517,10 +542,11 @@ mod test {
     #[test]
     fn test_multi_line() -> Result<()> {
         let mut lex = Lexer::new("\n \n \n A → B | C \n | D | E \n \n A → ϵ");
+        let mut table = SymbolTable::new();
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
-                token: Token::NonTerminal(String::from("A")),
+                token: Token::NonTerminal(0),
                 position: Position {
                     line: 4,
                     position: 2
@@ -528,7 +554,7 @@ mod test {
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
                 token: Token::ProductionSymbol,
                 position: Position {
@@ -538,9 +564,9 @@ mod test {
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
-                token: Token::NonTerminal(String::from("B")),
+                token: Token::NonTerminal(1),
                 position: Position {
                     line: 4,
                     position: 6
@@ -548,7 +574,7 @@ mod test {
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
                 token: Token::Alternative,
                 position: Position {
@@ -558,9 +584,9 @@ mod test {
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
-                token: Token::NonTerminal(String::from("C")),
+                token: Token::NonTerminal(2),
                 position: Position {
                     line: 4,
                     position: 10
@@ -568,7 +594,7 @@ mod test {
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
                 token: Token::EndOfProduction,
                 position: Position {
@@ -578,7 +604,7 @@ mod test {
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
                 token: Token::Alternative,
                 position: Position {
@@ -588,9 +614,9 @@ mod test {
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
-                token: Token::NonTerminal(String::from("D")),
+                token: Token::NonTerminal(3),
                 position: Position {
                     line: 5,
                     position: 4
@@ -598,7 +624,7 @@ mod test {
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
                 token: Token::Alternative,
                 position: Position {
@@ -608,9 +634,9 @@ mod test {
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
-                token: Token::NonTerminal(String::from("E")),
+                token: Token::NonTerminal(4),
                 position: Position {
                     line: 5,
                     position: 8
@@ -618,7 +644,7 @@ mod test {
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
                 token: Token::EndOfProduction,
                 position: Position {
@@ -628,9 +654,9 @@ mod test {
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
-                token: Token::NonTerminal(String::from("A")),
+                token: Token::NonTerminal(0),
                 position: Position {
                     line: 7,
                     position: 2
@@ -638,7 +664,7 @@ mod test {
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
                 token: Token::ProductionSymbol,
                 position: Position {
@@ -648,7 +674,7 @@ mod test {
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
                 token: Token::Empty,
                 position: Position {
@@ -657,35 +683,47 @@ mod test {
                 },
             })
         );
-        assert_eq!(lex.next_token()?, None);
+        assert_eq!(lex.next_token(&mut table)?, None);
+
+        assert_eq!(table.len(), 5);
+        assert_eq!(table.non_terminal_value(0), "A");
+        assert_eq!(table.non_terminal_value(1), "B");
+        assert_eq!(table.non_terminal_value(2), "C");
+        assert_eq!(table.non_terminal_value(3), "D");
+        assert_eq!(table.non_terminal_value(4), "E");
 
         Ok(())
     }
 
     #[test]
     fn test_production_symbol_fail() -> Result<()> {
+        let mut table = SymbolTable::new();
+
         let mut lex = Lexer::new(":a");
-        assert_error_text(lex.next_token(), "unexpected input character 'a'");
+        assert_error_text(lex.next_token(&mut table), "unexpected input character 'a'");
 
         let mut lex = Lexer::new("::a");
-        assert_error_text(lex.next_token(), "unexpected input character 'a'");
+        assert_error_text(lex.next_token(&mut table), "unexpected input character 'a'");
 
         let mut lex = Lexer::new(":");
-        assert_error_text(lex.next_token(), "end of input");
+        assert_error_text(lex.next_token(&mut table), "end of input");
 
         let mut lex = Lexer::new("::");
-        assert_error_text(lex.next_token(), "end of input");
+        assert_error_text(lex.next_token(&mut table), "end of input");
+
+        assert!(table.is_empty());
 
         Ok(())
     }
 
     #[test]
     fn test_non_terminals() -> Result<()> {
-        let mut lex = Lexer::new("a B cde FGH sIbErIaNhAmStEr");
+        let mut lex = Lexer::new("a B cde FGH cde sIbErIaNhAmStEr");
+        let mut table = SymbolTable::new();
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
-                token: Token::NonTerminal(String::from("a")),
+                token: Token::NonTerminal(0),
                 position: Position {
                     line: 1,
                     position: 1
@@ -693,9 +731,9 @@ mod test {
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
-                token: Token::NonTerminal(String::from("B")),
+                token: Token::NonTerminal(1),
                 position: Position {
                     line: 1,
                     position: 3
@@ -703,9 +741,9 @@ mod test {
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
-                token: Token::NonTerminal(String::from("cde")),
+                token: Token::NonTerminal(2),
                 position: Position {
                     line: 1,
                     position: 5
@@ -713,9 +751,9 @@ mod test {
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
-                token: Token::NonTerminal(String::from("FGH")),
+                token: Token::NonTerminal(3),
                 position: Position {
                     line: 1,
                     position: 9
@@ -723,16 +761,33 @@ mod test {
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
-                token: Token::NonTerminal(String::from("sIbErIaNhAmStEr")),
+                token: Token::NonTerminal(2),
                 position: Position {
                     line: 1,
                     position: 13
                 },
             })
         );
-        assert_eq!(lex.next_token()?, None);
+        assert_eq!(
+            lex.next_token(&mut table)?,
+            Some(TokenInfo {
+                token: Token::NonTerminal(4),
+                position: Position {
+                    line: 1,
+                    position: 17
+                },
+            })
+        );
+        assert_eq!(lex.next_token(&mut table)?, None);
+
+        assert_eq!(table.len(), 5);
+        assert_eq!(table.non_terminal_value(0), "a");
+        assert_eq!(table.non_terminal_value(1), "B");
+        assert_eq!(table.non_terminal_value(2), "cde");
+        assert_eq!(table.non_terminal_value(3), "FGH");
+        assert_eq!(table.non_terminal_value(4), "sIbErIaNhAmStEr");
 
         Ok(())
     }
@@ -740,8 +795,9 @@ mod test {
     #[test]
     fn test_symbols() -> Result<()> {
         let mut lex = Lexer::new("→ ::= ε ϵ _ |");
+        let mut table = SymbolTable::new();
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
                 token: Token::ProductionSymbol,
                 position: Position {
@@ -751,7 +807,7 @@ mod test {
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
                 token: Token::ProductionSymbol,
                 position: Position {
@@ -761,7 +817,7 @@ mod test {
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
                 token: Token::Empty,
                 position: Position {
@@ -771,7 +827,7 @@ mod test {
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
                 token: Token::Empty,
                 position: Position {
@@ -781,7 +837,7 @@ mod test {
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
                 token: Token::Empty,
                 position: Position {
@@ -791,7 +847,7 @@ mod test {
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
                 token: Token::Alternative,
                 position: Position {
@@ -800,18 +856,21 @@ mod test {
                 },
             })
         );
-        assert_eq!(lex.next_token()?, None);
+        assert_eq!(lex.next_token(&mut table)?, None);
+
+        assert!(table.is_empty());
 
         Ok(())
     }
 
     #[test]
     fn test_terminals() -> Result<()> {
-        let mut lex = Lexer::new(r#"'a' "b" '"c"' "'d'" 'e\\\t\r\nf'"#);
+        let mut lex = Lexer::new(r#"'a' "b" 'a' '"c"' "'d'" 'e\\\t\r\nf'"#);
+        let mut table = SymbolTable::new();
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
-                token: Token::Terminal(String::from("a")),
+                token: Token::Terminal(0),
                 position: Position {
                     line: 1,
                     position: 1
@@ -819,9 +878,9 @@ mod test {
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
-                token: Token::Terminal(String::from("b")),
+                token: Token::Terminal(1),
                 position: Position {
                     line: 1,
                     position: 5
@@ -829,9 +888,9 @@ mod test {
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
-                token: Token::Terminal(String::from(r#""c""#)),
+                token: Token::Terminal(0),
                 position: Position {
                     line: 1,
                     position: 9
@@ -839,48 +898,76 @@ mod test {
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
-                token: Token::Terminal(String::from("'d'")),
+                token: Token::Terminal(2),
                 position: Position {
                     line: 1,
-                    position: 15
+                    position: 13,
                 },
             })
         );
         assert_eq!(
-            lex.next_token()?,
+            lex.next_token(&mut table)?,
             Some(TokenInfo {
-                token: Token::Terminal(String::from("e\\\t\r\nf")),
+                token: Token::Terminal(3),
                 position: Position {
                     line: 1,
-                    position: 21
+                    position: 19
                 },
             })
         );
-        assert_eq!(lex.next_token()?, None);
+        assert_eq!(
+            lex.next_token(&mut table)?,
+            Some(TokenInfo {
+                token: Token::Terminal(4),
+                position: Position {
+                    line: 1,
+                    position: 25
+                },
+            })
+        );
+        assert_eq!(lex.next_token(&mut table)?, None);
+
+        assert_eq!(table.len(), 5);
+        assert_eq!(table.terminal_value(0), "a");
+        assert_eq!(table.terminal_value(1), "b");
+        assert_eq!(table.terminal_value(2), r#""c""#);
+        assert_eq!(table.terminal_value(3), "'d'");
+        assert_eq!(table.terminal_value(4), "e\\\t\r\nf");
 
         Ok(())
     }
 
     #[test]
     fn test_terminals_fail() -> Result<()> {
+        let mut table = SymbolTable::new();
+
         let mut lex = Lexer::new("'string not closed");
-        assert_error_text(lex.next_token(), "unterminated terminal");
+        assert_error_text(lex.next_token(&mut table), "unterminated terminal");
 
         let mut lex = Lexer::new("'string not closed\nA → B | C");
-        assert_error_text(lex.next_token(), "unterminated terminal");
+        assert_error_text(lex.next_token(&mut table), "unterminated terminal");
 
         let mut lex = Lexer::new(r#"'\q'"#);
-        assert_error_text(lex.next_token(), "unrecognized escape character '\\q'");
+        assert_error_text(
+            lex.next_token(&mut table),
+            "unrecognized escape character '\\q'",
+        );
+
+        assert!(table.is_empty());
 
         Ok(())
     }
 
     #[test]
     fn test_unexpected_character_fail() -> Result<()> {
+        let mut table = SymbolTable::new();
+
         let mut lex = Lexer::new("@");
-        assert_error_text(lex.next_token(), "unexpected input character '@'");
+        assert_error_text(lex.next_token(&mut table), "unexpected input character '@'");
+
+        assert!(table.is_empty());
 
         Ok(())
     }

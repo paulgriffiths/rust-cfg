@@ -1,16 +1,36 @@
+use crate::lexer::Lexer;
+use crate::symboltable::SymbolTable;
+
 pub struct Parser {
-    // Nonsense field just to stub out a non-empty object
-    min_size: usize,
+    lexer: Lexer,
+    symbol_table: SymbolTable,
 }
 
 impl Parser {
-    pub fn new(min_size: usize) -> Parser {
-        Parser { min_size }
+    pub fn new(grammar: &str) -> Parser {
+        Parser {
+            lexer: Lexer::new(grammar),
+            symbol_table: SymbolTable::new(),
+        }
     }
 
-    /// Stub implementation, just returns true if the length of the input
-    /// is no smaller than the minimum size
+    /// Stub implementation, just returns true if the input is none empty and
+    /// the grammar passed to new() lexes.
     pub fn parse(&mut self, input: &str) -> bool {
-        input.len() >= self.min_size
+        if input.is_empty() {
+            return false;
+        }
+
+        loop {
+            let Ok(token) = self.lexer.next_token(&mut self.symbol_table) else {
+                return false;
+            };
+
+            if token.is_none() {
+                break;
+            }
+        }
+
+        true
     }
 }

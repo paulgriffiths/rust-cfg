@@ -14,9 +14,9 @@ pub enum Token {
     Alternative,
     Empty,
     EndOfProduction,
-    NonTerminal(String),
+    NonTerminal(usize),
     ProductionSymbol,
-    Terminal(String),
+    Terminal(usize),
 }
 
 impl fmt::Display for Token {
