@@ -255,6 +255,7 @@ impl Lexer {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::test::{assert_error_text, test_file};
 
     #[test]
     fn test_comments() -> Result<()> {
@@ -282,6 +283,30 @@ mod test {
             Some(Token::NonTerminal(String::from("E")))
         );
         assert_eq!(lex.next_token()?, None);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_grammar_file() -> Result<()> {
+        let data = test_file("grammars/nlr_simple_expr.cfg");
+        let mut lex = Lexer::new(&data);
+
+        // Just verify the first production
+        assert_eq!(
+            lex.next_token()?,
+            Some(Token::NonTerminal(String::from("E")))
+        );
+        assert_eq!(lex.next_token()?, Some(Token::ProductionSymbol));
+        assert_eq!(
+            lex.next_token()?,
+            Some(Token::NonTerminal(String::from("T")))
+        );
+        assert_eq!(
+            lex.next_token()?,
+            Some(Token::NonTerminal(String::from("Er")))
+        );
+        assert_eq!(lex.next_token()?, Some(Token::EndOfProduction));
 
         Ok(())
     }
@@ -470,17 +495,5 @@ mod test {
         assert_error_text(lex.next_token(), "unexpected input character '@'");
 
         Ok(())
-    }
-
-    /// Helper function to verify the text of an error
-    fn assert_error_text(result: Result<Option<Token>>, want: &str) {
-        match result {
-            Err(e) => {
-                assert_eq!(e.to_string(), want);
-            }
-            Ok(_) => {
-                panic!("no error");
-            }
-        }
     }
 }
