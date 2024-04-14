@@ -43,6 +43,47 @@ impl Grammar {
         })
     }
 
+    /// Returns FIRST(symbols) where symbols is a string of grammar symbols.
+    pub fn first(&self, symbols: &[usize]) -> HashSet<FirstItem> {
+        // Algorithm adapted from Aho et el (2007) p.221
+        if symbols.is_empty() {
+            panic!("first called with no symbols")
+        }
+
+        let mut set: HashSet<FirstItem> = HashSet::new();
+
+        for symbol in symbols {
+            // If FIRST(symbol) does not include ϵ then no later symbol can
+            // influence FIRST(symbols), so return
+            if !self.first_excluding_e(*symbol, &mut set) {
+                return set;
+            }
+        }
+
+        // Add ϵ to FIRST(symbols) if FIRST(symbol) contains ϵ for all
+        // symbol in symbols.
+        set.insert(FirstItem::Empty);
+
+        set
+    }
+
+    /// Adds all elements of FIRST(symbol) to set, excluding ϵ. Returns
+    /// true if ϵ is in FIRST(symbol).
+    fn first_excluding_e(&self, symbol: usize, set: &mut HashSet<FirstItem>) -> bool {
+        let mut has_empty = false;
+
+        for c in &self.firsts[symbol] {
+            match c {
+                FirstItem::Empty => has_empty = true,
+                _ => {
+                    set.insert(*c);
+                }
+            }
+        }
+
+        has_empty
+    }
+
     /// Creates a context-free grammar from a string representation in a file
     /// with the given path
     pub fn new_from_file(path: &str) -> std::result::Result<Grammar, Box<dyn std::error::Error>> {
@@ -77,21 +118,35 @@ mod test {
     use crate::test::test_file_path;
 
     #[test]
-    fn test_num_productions() -> std::result::Result<(), Box<dyn std::error::Error>> {
-        let g = Grammar::new_from_file(&test_file_path("grammars/nlr_simple_expr.cfg"))?;
-        assert_eq!(g.num_productions(), 37);
+    fn test_first() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let g = Grammar::new_from_file(&test_file_path("grammars/simple_first.cfg"))?;
+
+        assert_eq!(g.first(&[0]), char_set(&['s', 'e', 'b', 'f', 'c'], false)); // A
+        assert_eq!(g.first(&[1]), char_set(&['f', 'c'], true)); // B
+        assert_eq!(g.first(&[2]), char_set(&['b'], false)); // D
+        assert_eq!(g.first(&[3]), char_set(&['s', 'e'], false)); // C
+        assert_eq!(g.first(&[4]), char_set(&['f'], false)); // 'fish'
+        assert_eq!(g.first(&[5]), char_set(&['c'], false)); // 'chips'
+        assert_eq!(g.first(&[6]), char_set(&['s'], false)); // 'sausage'
+        assert_eq!(g.first(&[7]), char_set(&['e'], false)); // 'egg'
+        assert_eq!(g.first(&[8]), char_set(&['b'], false)); // 'bacon'
+        assert_eq!(g.first(&[1, 3]), char_set(&['s', 'e', 'f', 'c'], false)); // BC
+        assert_eq!(g.first(&[1, 1]), char_set(&['f', 'c'], true)); // BB
+        assert_eq!(g.first(&[1, 2]), char_set(&['b', 'f', 'c'], false)); // BD
+        assert_eq!(g.first(&[2, 1]), char_set(&['b'], false)); // DB
+        assert_eq!(g.first(&[2, 3]), char_set(&['b'], false)); // DC
+        assert_eq!(g.first(&[3, 1]), char_set(&['s', 'e'], false)); // CA
+        assert_eq!(g.first(&[3, 2]), char_set(&['s', 'e'], false)); // CD
+        assert_eq!(g.first(&[1, 1, 2]), char_set(&['b', 'f', 'c'], false)); // BBD
+        assert_eq!(g.first(&[1, 1, 3]), char_set(&['s', 'e', 'f', 'c'], false)); // BBC
 
         Ok(())
     }
 
     #[test]
-    fn test_symbol_ids() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    fn test_num_productions() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let g = Grammar::new_from_file(&test_file_path("grammars/nlr_simple_expr.cfg"))?;
-        assert_eq!(g.non_terminal_ids(), vec![0, 1, 2, 4, 5, 9, 10, 11]);
-        assert_eq!(
-            g.terminal_ids(),
-            [vec![3usize, 6, 7, 8], (12..38).collect::<Vec<usize>>()].concat()
-        );
+        assert_eq!(g.num_productions(), 37);
 
         Ok(())
     }
@@ -113,5 +168,36 @@ mod test {
         assert_eq!(g.productions_for_non_terminal(11), vec![9, 10]); // IDr
 
         Ok(())
+    }
+
+    #[test]
+    fn test_symbol_ids() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let g = Grammar::new_from_file(&test_file_path("grammars/nlr_simple_expr.cfg"))?;
+        assert_eq!(g.non_terminal_ids(), vec![0, 1, 2, 4, 5, 9, 10, 11]);
+        assert_eq!(
+            g.terminal_ids(),
+            [vec![3usize, 6, 7, 8], (12..38).collect::<Vec<usize>>()].concat()
+        );
+
+        Ok(())
+    }
+
+    /// Helper function to create a HashSet of FirstItem from a slice of
+    /// characters. FirstItem::Empty is included if include_empty is true.
+    fn char_set(chars: &[char], include_empty: bool) -> HashSet<FirstItem> {
+        let mut set: HashSet<FirstItem> = HashSet::from_iter(
+            chars
+                .iter()
+                .map(|c| FirstItem::Character(*c))
+                .collect::<Vec<_>>()
+                .iter()
+                .cloned(),
+        );
+
+        if include_empty {
+            set.insert(FirstItem::Empty);
+        }
+
+        set
     }
 }
