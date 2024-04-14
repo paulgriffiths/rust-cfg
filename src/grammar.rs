@@ -1,10 +1,11 @@
+mod firstfollow;
 mod input_info;
 mod lexer;
 mod parser;
 mod symboltable;
 mod token;
 use crate::errors::Result;
-pub use parser::{FirstItem, FollowItem};
+pub use firstfollow::{FirstItem, FollowItem};
 use std::collections::{HashMap, HashSet};
 use symboltable::SymbolTable;
 
@@ -34,8 +35,9 @@ impl Grammar {
     /// Creates a context-free grammar from a string representation
     pub fn new(input: &str) -> Result<Grammar> {
         let output = parser::parse(input)?;
-        let firsts = output.calculate_firsts();
-        let follows = output.calculate_follows(&firsts);
+        let builder = firstfollow::Builder::new(&output.symbol_table, &output.productions);
+        let firsts = builder.firsts;
+        let follows = builder.follows;
 
         Ok(Grammar {
             symbol_table: output.symbol_table,
@@ -54,16 +56,15 @@ impl Grammar {
         }
 
         let mut set: HashSet<FirstItem> = HashSet::new();
-
         for symbol in symbols {
             // If FIRST(symbol) does not include ϵ then no later symbol can
-            // influence FIRST(symbols), so return
+            // affect FIRST(symbols), so return
             if !self.first_excluding_e(*symbol, &mut set) {
                 return set;
             }
         }
 
-        // Add ϵ to FIRST(symbols) if FIRST(symbol) contains ϵ for all
+        // Add ϵ to FIRST(symbols) if FIRST(symbol) contains ϵ for each
         // symbol in symbols.
         set.insert(FirstItem::Empty);
 
@@ -87,9 +88,9 @@ impl Grammar {
         has_empty
     }
 
-    /// Returns FOLLOW(non_terminal)
-    pub fn follow(&self, non_terminal: usize) -> HashSet<FollowItem> {
-        self.follows.get(&non_terminal).unwrap().clone()
+    /// Returns FOLLOW(nt)
+    pub fn follow(&self, nt: usize) -> HashSet<FollowItem> {
+        self.follows.get(&nt).unwrap().clone()
     }
 
     /// Creates a context-free grammar from a string representation in a file
