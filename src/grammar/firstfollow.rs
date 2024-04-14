@@ -264,3 +264,41 @@ impl<'b> Builder<'b> {
         self.follows.get_mut(&nt).unwrap().insert(item);
     }
 }
+
+/// Returns true if the intersection between two FIRST sets is empty
+pub fn firsts_distinct(first: &HashSet<FirstItem>, second: &HashSet<FirstItem>) -> bool {
+    first.intersection(second).peekable().peek().is_none()
+}
+
+/// Returns true if the intersection between the set of characters in a FIRST
+/// set and the set if characters in a FOLLOW set is empty
+pub fn first_follow_distinct(first: &HashSet<FirstItem>, follow: &HashSet<FollowItem>) -> bool {
+    let mut follow_set: HashSet<FirstItem> = HashSet::new();
+    for item in follow {
+        if let FollowItem::Character(c) = item {
+            follow_set.insert(FirstItem::Character(*c));
+        }
+    }
+
+    first.intersection(&follow_set).peekable().peek().is_none()
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_firsts_distinct() {
+        let first: HashSet<FirstItem> =
+            HashSet::from([FirstItem::Character('a'), FirstItem::Character('b')]);
+        let second: HashSet<FirstItem> =
+            HashSet::from([FirstItem::Character('c'), FirstItem::Character('d')]);
+        assert!(firsts_distinct(&first, &second));
+
+        let first: HashSet<FirstItem> =
+            HashSet::from([FirstItem::Character('a'), FirstItem::Character('b')]);
+        let second: HashSet<FirstItem> =
+            HashSet::from([FirstItem::Character('b'), FirstItem::Character('c')]);
+        assert!(!firsts_distinct(&first, &second));
+    }
+}

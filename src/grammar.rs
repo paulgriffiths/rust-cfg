@@ -22,6 +22,13 @@ pub struct Production {
     pub body: Vec<Symbol>,
 }
 
+impl Production {
+    /// Returns true if a production is an ϵ-production
+    pub fn is_e(&self) -> bool {
+        self.body.len() == 1 && matches!(self.body[0], Symbol::Empty)
+    }
+}
+
 /// A context-free grammar
 pub struct Grammar {
     pub productions: Vec<Production>,
@@ -48,35 +55,67 @@ impl Grammar {
         })
     }
 
+    /// Creates a context-free grammar from a string representation in a file
+    /// with the given path
+    pub fn new_from_file(path: &str) -> std::result::Result<Grammar, Box<dyn std::error::Error>> {
+        Ok(Grammar::new(&std::fs::read_to_string(path)?)?)
+    }
+
     /// Returns FIRST(symbols) where symbols is a string of grammar symbols.
-    pub fn first(&self, symbols: &[usize]) -> HashSet<FirstItem> {
+    /// Panics if any of the symbols are ϵ.
+    fn first(&self, symbols: &[Symbol], include_e: bool) -> (HashSet<FirstItem>, bool) {
+        // Extract symbol IDs
+        let string: Vec<usize> = symbols
+            .iter()
+            .map(|s| match *s {
+                Symbol::NonTerminal(n) | Symbol::Terminal(n) => n,
+                Symbol::Empty => {
+                    panic!("empty")
+                }
+            })
+            .collect();
+
+        self.first_internal_ids(&string, include_e)
+    }
+
+    /// Returns FIRST(ids) where ids is a string of grammar symbol IDs
+    pub fn first_ids(&self, ids: &[usize]) -> HashSet<FirstItem> {
+        let (set, _) = self.first_internal_ids(ids, true);
+        set
+    }
+
+    /// Returns FIRST(ids) excluding ϵ where ids is a string of grammar symbol
+    /// IDs. If ϵ is in FIRST(ids), the second return value will be true.
+    fn first_internal_ids(&self, ids: &[usize], include_e: bool) -> (HashSet<FirstItem>, bool) {
         // Algorithm adapted from Aho et el (2007) p.221
-        if symbols.is_empty() {
+
+        if ids.is_empty() {
             panic!("first called with no symbols")
         }
 
         let mut set: HashSet<FirstItem> = HashSet::new();
-        for symbol in symbols {
-            // If FIRST(symbol) does not include ϵ then no later symbol can
-            // affect FIRST(symbols), so return
-            if !self.first_excluding_e(*symbol, &mut set) {
-                return set;
+        for id in ids {
+            // If FIRST(id) does not include ϵ then no later symbol can
+            // affect FIRST(ids), so return
+            if !self.first_excluding_e(*id, &mut set) {
+                return (set, false);
             }
         }
 
-        // Add ϵ to FIRST(symbols) if FIRST(symbol) contains ϵ for each
-        // symbol in symbols.
-        set.insert(FirstItem::Empty);
+        // Add ϵ to FIRST(ids) if FIRST(id) contains ϵ for each id in ids
+        if include_e {
+            set.insert(FirstItem::Empty);
+        }
 
-        set
+        (set, true)
     }
 
-    /// Adds all elements of FIRST(symbol) to set, excluding ϵ. Returns
-    /// true if ϵ is in FIRST(symbol).
-    fn first_excluding_e(&self, symbol: usize, set: &mut HashSet<FirstItem>) -> bool {
+    /// Adds all elements of FIRST(id) to set, excluding ϵ. Returns true
+    /// if ϵ is in FIRST(id).
+    fn first_excluding_e(&self, id: usize, set: &mut HashSet<FirstItem>) -> bool {
         let mut has_empty = false;
 
-        for c in &self.firsts[symbol] {
+        for c in &self.firsts[id] {
             match c {
                 FirstItem::Empty => has_empty = true,
                 _ => {
@@ -93,10 +132,68 @@ impl Grammar {
         self.follows.get(&nt).unwrap().clone()
     }
 
-    /// Creates a context-free grammar from a string representation in a file
-    /// with the given path
-    pub fn new_from_file(path: &str) -> std::result::Result<Grammar, Box<dyn std::error::Error>> {
-        Ok(Grammar::new(&std::fs::read_to_string(path)?)?)
+    /// Returns true if the grammar is an LL(1) grammar
+    pub fn is_ll_one(&self) -> bool {
+        // Algorithm adapted from Aho et al (2007) p.223
+
+        for nt in self.non_terminal_ids() {
+            let mut all_firsts: HashSet<FirstItem> = HashSet::new();
+            let mut non_e_firsts: HashSet<FirstItem> = HashSet::new();
+            let mut found_e = false;
+
+            for p in self.productions_for_non_terminal(*nt) {
+                // If A → 𝛼 | 𝛽 are two distinct productions, at most one
+                // of 𝛼 and 𝛽 can derive the empty string, so if this
+                // production is an ϵ-production, record that fact and then
+                // skip it
+                if self.productions[*p].is_e() {
+                    if found_e {
+                        return false;
+                    }
+                    found_e = true;
+                    continue;
+                }
+
+                // If A → 𝛼 | 𝛽 are two distinct productions, for no terminal w
+                // do both 𝛼 and 𝛽 derive strings beginning with w
+                let (first_this, contains_e) = self.first(&self.productions[*p].body, false);
+                if !firstfollow::firsts_distinct(&first_this, &all_firsts) {
+                    return false;
+                }
+
+                if contains_e {
+                    if found_e {
+                        // If A → 𝛼 | 𝛽 are two distinct productions, at most one
+                        // of 𝛼 and 𝛽 can derive the empty string
+                        return false;
+                    }
+                    found_e = true;
+                } else {
+                    // If A → 𝛼 | 𝛽 are two distinct productions, then if 𝛼 derives
+                    // ϵ, 𝛽 must not derive any string beginning with a terminal in
+                    // FOLLOW(A). If this production does not derive ϵ, then
+                    // aggregate its firsts so we can do the comparison later.
+                    for item in &first_this {
+                        non_e_firsts.insert(*item);
+                    }
+                }
+
+                // Adds firsts for this production to the all firsts set to
+                // check for distinctness for the next production
+                for item in &first_this {
+                    all_firsts.insert(*item);
+                }
+            }
+
+            // If A → 𝛼 | 𝛽 are two distinct productions, then if 𝛼 derives
+            // ϵ, 𝛽 must not derive any string beginning with a terminal in
+            // FOLLOW(A).
+            if found_e && !firstfollow::first_follow_distinct(&non_e_firsts, &self.follow(*nt)) {
+                return false;
+            }
+        }
+
+        true
     }
 
     /// Returns a sorted slice of the IDs of all non-terminals
@@ -127,34 +224,40 @@ mod test {
     use crate::test::test_file_path;
 
     #[test]
-    fn test_first() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    fn test_first_ids() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let g = Grammar::new_from_file(&test_file_path("grammars/simple_first.cfg"))?;
 
         assert_eq!(
-            g.first(&[0]),
+            g.first_ids(&[0]),
             first_char_set(&['s', 'e', 'b', 'f', 'c'], false)
         ); // A
-        assert_eq!(g.first(&[1]), first_char_set(&['f', 'c'], true)); // B
-        assert_eq!(g.first(&[2]), first_char_set(&['b'], false)); // D
-        assert_eq!(g.first(&[3]), first_char_set(&['s', 'e'], false)); // C
-        assert_eq!(g.first(&[4]), first_char_set(&['f'], false)); // 'fish'
-        assert_eq!(g.first(&[5]), first_char_set(&['c'], false)); // 'chips'
-        assert_eq!(g.first(&[6]), first_char_set(&['s'], false)); // 'sausage'
-        assert_eq!(g.first(&[7]), first_char_set(&['e'], false)); // 'egg'
-        assert_eq!(g.first(&[8]), first_char_set(&['b'], false)); // 'bacon'
+        assert_eq!(g.first_ids(&[1]), first_char_set(&['f', 'c'], true)); // B
+        assert_eq!(g.first_ids(&[2]), first_char_set(&['b'], false)); // D
+        assert_eq!(g.first_ids(&[3]), first_char_set(&['s', 'e'], false)); // C
+        assert_eq!(g.first_ids(&[4]), first_char_set(&['f'], false)); // 'fish'
+        assert_eq!(g.first_ids(&[5]), first_char_set(&['c'], false)); // 'chips'
+        assert_eq!(g.first_ids(&[6]), first_char_set(&['s'], false)); // 'sausage'
+        assert_eq!(g.first_ids(&[7]), first_char_set(&['e'], false)); // 'egg'
+        assert_eq!(g.first_ids(&[8]), first_char_set(&['b'], false)); // 'bacon'
         assert_eq!(
-            g.first(&[1, 3]),
+            g.first_ids(&[1, 3]),
             first_char_set(&['s', 'e', 'f', 'c'], false)
         ); // BC
-        assert_eq!(g.first(&[1, 1]), first_char_set(&['f', 'c'], true)); // BB
-        assert_eq!(g.first(&[1, 2]), first_char_set(&['b', 'f', 'c'], false)); // BD
-        assert_eq!(g.first(&[2, 1]), first_char_set(&['b'], false)); // DB
-        assert_eq!(g.first(&[2, 3]), first_char_set(&['b'], false)); // DC
-        assert_eq!(g.first(&[3, 1]), first_char_set(&['s', 'e'], false)); // CA
-        assert_eq!(g.first(&[3, 2]), first_char_set(&['s', 'e'], false)); // CD
-        assert_eq!(g.first(&[1, 1, 2]), first_char_set(&['b', 'f', 'c'], false)); // BBD
+        assert_eq!(g.first_ids(&[1, 1]), first_char_set(&['f', 'c'], true)); // BB
         assert_eq!(
-            g.first(&[1, 1, 3]),
+            g.first_ids(&[1, 2]),
+            first_char_set(&['b', 'f', 'c'], false)
+        ); // BD
+        assert_eq!(g.first_ids(&[2, 1]), first_char_set(&['b'], false)); // DB
+        assert_eq!(g.first_ids(&[2, 3]), first_char_set(&['b'], false)); // DC
+        assert_eq!(g.first_ids(&[3, 1]), first_char_set(&['s', 'e'], false)); // CA
+        assert_eq!(g.first_ids(&[3, 2]), first_char_set(&['s', 'e'], false)); // CD
+        assert_eq!(
+            g.first_ids(&[1, 1, 2]),
+            first_char_set(&['b', 'f', 'c'], false)
+        ); // BBD
+        assert_eq!(
+            g.first_ids(&[1, 1, 3]),
             first_char_set(&['s', 'e', 'f', 'c'], false)
         ); // BBC
 
@@ -185,6 +288,17 @@ mod test {
         assert_eq!(g.follow(15), follow_char_set(&['h'], false)); // G
         assert_eq!(g.follow(16), follow_char_set(&['i'], true)); // H
         assert_eq!(g.follow(17), follow_char_set(&[], true)); // I
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_is_ll_one() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let g = Grammar::new_from_file(&test_file_path("grammars/nlr_simple_expr.cfg"))?;
+        assert!(g.is_ll_one());
+
+        let g = Grammar::new_from_file(&test_file_path("grammars/lr_simple_expr.cfg"))?;
+        assert!(!g.is_ll_one());
 
         Ok(())
     }
