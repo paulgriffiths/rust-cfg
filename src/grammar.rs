@@ -4,7 +4,8 @@ mod parser;
 mod symboltable;
 mod token;
 use crate::errors::Result;
-use std::collections::HashMap;
+pub use parser::FirstItem;
+use std::collections::{HashMap, HashSet};
 use symboltable::SymbolTable;
 
 /// A context-free grammar symbol
@@ -25,17 +26,20 @@ pub struct Grammar {
     pub productions: Vec<Production>,
     pub symbol_table: SymbolTable,
     pub nt_productions: HashMap<usize, Vec<usize>>,
+    pub firsts: Vec<HashSet<FirstItem>>,
 }
 
 impl Grammar {
     /// Creates a context-free grammar from a string representation
     pub fn new(input: &str) -> Result<Grammar> {
         let output = parser::parse(input)?;
+        let firsts = output.calculate_firsts();
 
         Ok(Grammar {
             symbol_table: output.symbol_table,
             productions: output.productions,
             nt_productions: output.nt_productions,
+            firsts,
         })
     }
 

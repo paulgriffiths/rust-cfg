@@ -3,7 +3,7 @@ use crate::grammar::lexer::Lexer;
 use crate::grammar::symboltable::SymbolTable;
 use crate::grammar::token::{Token, TokenInfo};
 use crate::grammar::{Production, Symbol};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// A parser to parse a representation of a context-free grammar
 struct Parser {
@@ -13,11 +13,107 @@ struct Parser {
     lookahead: Option<TokenInfo>,
 }
 
+#[derive(Debug, Eq, Hash, PartialEq, Clone, Copy)]
+pub enum FirstItem {
+    Character(char),
+    Empty,
+}
+
 /// The parser's output
 pub struct ParserOutput {
     pub symbol_table: SymbolTable,
     pub productions: Vec<Production>,
     pub nt_productions: HashMap<usize, Vec<usize>>,
+}
+
+impl ParserOutput {
+    /// Calculates FIRST(symbol) for all grammar symbols
+    pub fn calculate_firsts(&self) -> Vec<HashSet<FirstItem>> {
+        // This algorithm is adapted from Aho et al (2007) p.221
+        let mut firsts: Vec<_> = (0..self.symbol_table.len())
+            .map(|_| HashSet::<FirstItem>::new())
+            .collect();
+
+        // Calculate FIRST for terminals separately, as these sets never change
+        // and only need to be calculated once
+        for i in self.symbol_table.terminal_ids().iter() {
+            firsts[*i].insert(FirstItem::Character(
+                self.symbol_table.terminal_value(*i).chars().next().unwrap(),
+            ));
+        }
+
+        // Then calculate FIRST for non-terminals. This is an iterative process
+        // since non-terminal productions can refer to other non-terminals and
+        // to themselves. We continue iterating through this loop until no more
+        // elements are added to any FIRST set, at which point no additional
+        // iterations will add any more elements, either.
+        let mut count = 0;
+        loop {
+            // Update FIRST for each production.
+            for id in 0..self.productions.len() {
+                self.first_production(&mut firsts, id);
+            }
+
+            // Terminate the loop if no elements were added to any FIRST set
+            let this_count = firsts.iter().map(|symbol| symbol.len()).sum();
+            if this_count == count {
+                break;
+            }
+
+            count = this_count;
+        }
+
+        firsts
+    }
+
+    /// Updates FIRST(non_terminal) with elements of FIRST(production)
+    pub fn first_production(&self, firsts: &mut [HashSet<FirstItem>], id: usize) {
+        for symbol in self.productions[id].body.iter() {
+            // If FIRST(symbol) does not contain ϵ, subsequent symbols cannot
+            // contribute to FIRST(production), so return
+            if !self.first_symbol(firsts, self.productions[id].head, symbol) {
+                return;
+            }
+        }
+
+        // If FIRST(symbol) contains ϵ for all symbols in this production, then
+        // FIRST(production), and therefore FIRST(non_terminal), also contains ϵ
+        firsts[self.productions[id].head].insert(FirstItem::Empty);
+    }
+
+    /// Updates FIRST(non_terminal) with non-ϵ elements of FIRST(symbol).
+    /// Returns true if FIRST(symbol) does contain ϵ.
+    pub fn first_symbol(
+        &self,
+        firsts: &mut [HashSet<FirstItem>],
+        non_terminal: usize,
+        symbol: &Symbol,
+    ) -> bool {
+        let mut additions: HashSet<FirstItem> = HashSet::new();
+        let mut has_empty = false;
+
+        match symbol {
+            Symbol::NonTerminal(n) | Symbol::Terminal(n) => {
+                for c in firsts[*n].iter() {
+                    match c {
+                        FirstItem::Empty => {
+                            has_empty = true;
+                        }
+                        FirstItem::Character(c) => {
+                            additions.insert(FirstItem::Character(*c));
+                        }
+                    }
+                }
+            }
+            Symbol::Empty => {
+                has_empty = true;
+            }
+        }
+
+        firsts[non_terminal].extend(additions);
+
+        has_empty
+    }
 }
 
 /// Parses the given representation of a context-free grammar
@@ -225,6 +321,64 @@ mod test {
     }
 
     #[test]
+    fn test_calculate_firsts() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let output = parse(&read_test_file("grammars/nlr_simple_expr.cfg"))?;
+
+        // Build test comparison sets which include lowercase letters
+        let letters = letters_set_with(&[]);
+        let letters_and_empty = letters_set_with(&[FirstItem::Empty]);
+        let letters_and_lparen = letters_set_with(&[FirstItem::Character('(')]);
+
+        let firsts = output.calculate_firsts();
+        assert_eq!(firsts[0], letters_and_lparen);
+        assert_eq!(firsts[1], letters_and_lparen);
+        assert_eq!(
+            firsts[2],
+            HashSet::from([FirstItem::Character('+'), FirstItem::Empty])
+        );
+        assert_eq!(firsts[3], HashSet::from([FirstItem::Character('+')]));
+        assert_eq!(firsts[4], letters_and_lparen);
+        assert_eq!(
+            firsts[5],
+            HashSet::from([FirstItem::Character('*'), FirstItem::Empty])
+        );
+        assert_eq!(firsts[6], HashSet::from([FirstItem::Character('*')]));
+        assert_eq!(firsts[7], HashSet::from([FirstItem::Character('(')]));
+        assert_eq!(firsts[8], HashSet::from([FirstItem::Character(')')]));
+        assert_eq!(firsts[9], letters);
+        assert_eq!(firsts[10], letters);
+        assert_eq!(firsts[11], letters_and_empty);
+        assert_eq!(firsts[12], HashSet::from([FirstItem::Character('a')]));
+        assert_eq!(firsts[13], HashSet::from([FirstItem::Character('b')]));
+        assert_eq!(firsts[14], HashSet::from([FirstItem::Character('c')]));
+        assert_eq!(firsts[15], HashSet::from([FirstItem::Character('d')]));
+        assert_eq!(firsts[16], HashSet::from([FirstItem::Character('e')]));
+        assert_eq!(firsts[17], HashSet::from([FirstItem::Character('f')]));
+        assert_eq!(firsts[18], HashSet::from([FirstItem::Character('g')]));
+        assert_eq!(firsts[19], HashSet::from([FirstItem::Character('h')]));
+        assert_eq!(firsts[20], HashSet::from([FirstItem::Character('i')]));
+        assert_eq!(firsts[21], HashSet::from([FirstItem::Character('j')]));
+        assert_eq!(firsts[22], HashSet::from([FirstItem::Character('k')]));
+        assert_eq!(firsts[23], HashSet::from([FirstItem::Character('l')]));
+        assert_eq!(firsts[24], HashSet::from([FirstItem::Character('m')]));
+        assert_eq!(firsts[25], HashSet::from([FirstItem::Character('n')]));
+        assert_eq!(firsts[26], HashSet::from([FirstItem::Character('o')]));
+        assert_eq!(firsts[27], HashSet::from([FirstItem::Character('p')]));
+        assert_eq!(firsts[28], HashSet::from([FirstItem::Character('q')]));
+        assert_eq!(firsts[29], HashSet::from([FirstItem::Character('r')]));
+        assert_eq!(firsts[30], HashSet::from([FirstItem::Character('s')]));
+        assert_eq!(firsts[31], HashSet::from([FirstItem::Character('t')]));
+        assert_eq!(firsts[32], HashSet::from([FirstItem::Character('u')]));
+        assert_eq!(firsts[33], HashSet::from([FirstItem::Character('v')]));
+        assert_eq!(firsts[34], HashSet::from([FirstItem::Character('w')]));
+        assert_eq!(firsts[35], HashSet::from([FirstItem::Character('x')]));
+        assert_eq!(firsts[36], HashSet::from([FirstItem::Character('y')]));
+        assert_eq!(firsts[37], HashSet::from([FirstItem::Character('z')]));
+
+        Ok(())
+    }
+
+    #[test]
     fn test_productions_for_non_terminal() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let output = parse(&read_test_file("grammars/nlr_simple_expr.cfg"))?;
 
@@ -265,5 +419,21 @@ mod test {
         assert_error_text(parse("A→→"), "expected grammar symbol");
         assert_error_text(parse("A→ϵB"), "ϵ-productions may not contain other symbols");
         assert_error_text(parse("A→B"), "no productions found for non-terminal 'B'");
+    }
+
+    /// Helpers function to build a set of FirstItems consisting of all
+    /// lowercase letters plus some optional extras
+    fn letters_set_with(extras: &[FirstItem]) -> HashSet<FirstItem> {
+        let letters_list = ('a'..='z')
+            .into_iter()
+            .map(|c| FirstItem::Character(c))
+            .collect::<Vec<FirstItem>>();
+        let mut letters = HashSet::from_iter(letters_list.iter().cloned());
+
+        for extra in extras.iter() {
+            letters.insert(*extra);
+        }
+
+        letters
     }
 }
