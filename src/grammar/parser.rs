@@ -19,6 +19,12 @@ pub enum FirstItem {
     Empty,
 }
 
+#[derive(Debug, Eq, Hash, PartialEq, Clone, Copy)]
+pub enum FollowItem {
+    Character(char),
+    EndOfInput,
+}
+
 /// The parser's output
 pub struct ParserOutput {
     pub symbol_table: SymbolTable,
@@ -67,7 +73,7 @@ impl ParserOutput {
     }
 
     /// Updates FIRST(non_terminal) with elements of FIRST(production)
-    pub fn first_production(&self, firsts: &mut [HashSet<FirstItem>], id: usize) {
+    fn first_production(&self, firsts: &mut [HashSet<FirstItem>], id: usize) {
         for symbol in self.productions[id].body.iter() {
             // If FIRST(symbol) does not contain ϵ, subsequent symbols cannot
             // contribute to FIRST(production), so return
@@ -83,7 +89,7 @@ impl ParserOutput {
 
     /// Updates FIRST(non_terminal) with non-ϵ elements of FIRST(symbol).
     /// Returns true if FIRST(symbol) does contain ϵ.
-    pub fn first_symbol(
+    fn first_symbol(
         &self,
         firsts: &mut [HashSet<FirstItem>],
         non_terminal: usize,
@@ -113,6 +119,127 @@ impl ParserOutput {
         firsts[non_terminal].extend(additions);
 
         has_empty
+    }
+
+    fn first_string(
+        &self,
+        firsts: &[HashSet<FirstItem>],
+        symbols: &[usize],
+    ) -> (HashSet<FirstItem>, bool) {
+        let mut set: HashSet<FirstItem> = HashSet::new();
+
+        for symbol in symbols {
+            // If FIRST(symbol) does not include ϵ then no later symbol can
+            // influence FIRST(symbols), so return
+            if !self.first_excluding_e(firsts, *symbol, &mut set) {
+                return (set, false);
+            }
+        }
+
+        (set, true)
+    }
+
+    /// Adds all elements of FIRST(symbol) to set, excluding ϵ. Returns
+    /// true if ϵ is in FIRST(symbol).
+    fn first_excluding_e(
+        &self,
+        firsts: &[HashSet<FirstItem>],
+        symbol: usize,
+        set: &mut HashSet<FirstItem>,
+    ) -> bool {
+        let mut has_empty = false;
+
+        for c in &firsts[symbol] {
+            match c {
+                FirstItem::Empty => has_empty = true,
+                _ => {
+                    set.insert(*c);
+                }
+            }
+        }
+
+        has_empty
+    }
+
+    pub fn calculate_follows(
+        &self,
+        firsts: &[HashSet<FirstItem>],
+    ) -> HashMap<usize, HashSet<FollowItem>> {
+        let mut follows: HashMap<usize, HashSet<FollowItem>> = HashMap::new();
+        for i in self.symbol_table.non_terminal_ids() {
+            follows.insert(*i, HashSet::new());
+        }
+
+        follows.get_mut(&0).unwrap().insert(FollowItem::EndOfInput);
+
+        let mut count = 1;
+        loop {
+            // Update FOLLOW for each production.
+            for id in 0..self.productions.len() {
+                self.follow_production(firsts, &mut follows, id);
+            }
+
+            // Terminate the loop if no elements were added to any FOLLOW set
+            let this_count = follows.values().map(|s| s.len()).sum();
+            if this_count == count {
+                break;
+            }
+
+            count = this_count;
+        }
+
+        follows
+    }
+
+    fn follow_production(
+        &self,
+        firsts: &[HashSet<FirstItem>],
+        follows: &mut HashMap<usize, HashSet<FollowItem>>,
+        id: usize,
+    ) {
+        let production = &self.productions[id];
+
+        for i in 0..(production.body.len() - 1) {
+            let Symbol::NonTerminal(non_terminal) = production.body[i] else {
+                continue;
+            };
+
+            let string = &production.body[(i + 1)..]
+                .iter()
+                .map(|s| match s {
+                    Symbol::NonTerminal(j) | Symbol::Terminal(j) => *j,
+                    Symbol::Empty => {
+                        panic!("empty in first string");
+                    }
+                })
+                .collect::<Vec<usize>>();
+            let (string_firsts, has_empty) = self.first_string(firsts, string);
+
+            for v in string_firsts {
+                if let FirstItem::Character(c) = v {
+                    follows
+                        .get_mut(&non_terminal)
+                        .unwrap()
+                        .insert(FollowItem::Character(c));
+                }
+            }
+
+            if has_empty && non_terminal != production.head {
+                let follow_head = follows.get(&production.head).unwrap().clone();
+                for x in follow_head {
+                    follows.get_mut(&non_terminal).unwrap().insert(x);
+                }
+            }
+        }
+
+        if let Some(Symbol::NonTerminal(non_terminal)) = production.body.last() {
+            if *non_terminal != production.head {
+                let follow_head = follows.get(&production.head).unwrap().clone();
+                for x in follow_head {
+                    follows.get_mut(non_terminal).unwrap().insert(x);
+                }
+            }
+        }
     }
 }
 
