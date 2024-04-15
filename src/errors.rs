@@ -4,6 +4,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, PartialEq)]
 pub enum Error {
+    EmptyInput,
     EmptyNotAlone,
     EmptyProductionBody,
     EmptyTerminal,
@@ -25,6 +26,7 @@ impl std::error::Error for Error {}
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            Error::EmptyInput => write!(f, "empty input"),
             Error::EmptyNotAlone => write!(f, "ϵ-productions may not contain other symbols"),
             Error::EmptyProductionBody => write!(f, "empty production body"),
             Error::EmptyTerminal => write!(f, "empty terminal"),

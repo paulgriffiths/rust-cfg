@@ -89,7 +89,7 @@ impl<'p> Parser<'p> {
     /// Parses an input string
     pub fn parse(&self, input: &str) -> Result<()> {
         if input.is_empty() {
-            return Err(Error::EndOfInput);
+            return Err(Error::EmptyInput);
         }
 
         let mut reader = Reader::new(input);
@@ -167,6 +167,14 @@ mod test {
     use crate::test::{assert_error_text, test_file_path};
 
     #[test]
+    fn test_not_ll_one() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let g = Grammar::new_from_file(&test_file_path("grammars/lr_simple_expr.cfg"))?;
+        assert_error_text(Parser::new(&g), "grammar is not LL(1)");
+
+        Ok(())
+    }
+
+    #[test]
     fn test_parse() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let g = Grammar::new_from_file(&test_file_path("grammars/nlr_simple_expr.cfg"))?;
         let parser = Parser::new(&g)?;
@@ -195,6 +203,7 @@ mod test {
     fn test_parse_fail() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let g = Grammar::new_from_file(&test_file_path("grammars/adventure.cfg"))?;
         let parser = Parser::new(&g)?;
+        assert_error_text(parser.parse(""), "empty input");
         assert_error_text(
             parser.parse("^"),
             "parse error: failed to get production for non-terminal action(0) for input symbol Character('^')",
