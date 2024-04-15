@@ -78,6 +78,14 @@ impl Grammar {
         self.first_internal_ids(&string, include_e)
     }
 
+    /// Returns FIRST(id) where id is the ID of a production.
+    pub fn first_production(&self, id: usize, include_e: bool) -> (HashSet<FirstItem>, bool) {
+        if self.productions[id].is_e() {
+            return (HashSet::new(), true);
+        }
+        self.first(&self.productions[id].body, include_e)
+    }
+
     /// Returns FIRST(ids) where ids is a string of grammar symbol IDs
     pub fn first_ids(&self, ids: &[usize]) -> HashSet<FirstItem> {
         let (set, _) = self.first_internal_ids(ids, true);
@@ -156,7 +164,7 @@ impl Grammar {
 
                 // If A → 𝛼 | 𝛽 are two distinct productions, for no terminal w
                 // do both 𝛼 and 𝛽 derive strings beginning with w
-                let (first_this, contains_e) = self.first(&self.productions[*p].body, false);
+                let (first_this, contains_e) = self.first_production(*p, false);
                 if !firstfollow::firsts_distinct(&first_this, &all_firsts) {
                     return false;
                 }
@@ -201,6 +209,11 @@ impl Grammar {
         self.symbol_table.non_terminal_ids()
     }
 
+    /// Returns the name of a non-terminal
+    pub fn non_terminal_name(&self, id: usize) -> String {
+        self.symbol_table.non_terminal_value(id)
+    }
+
     /// Returns the number of productions in the grammar
     pub fn num_productions(&self) -> usize {
         self.productions.len()
@@ -215,6 +228,11 @@ impl Grammar {
     /// Returns a sorted slice of the IDs of all terminals
     pub fn terminal_ids(&self) -> &[usize] {
         self.symbol_table.terminal_ids()
+    }
+
+    /// Returns the string value of a terminal
+    pub fn terminal_value(&self, id: usize) -> String {
+        self.symbol_table.terminal_value(id)
     }
 }
 
