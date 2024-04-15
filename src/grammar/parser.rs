@@ -3,7 +3,8 @@ use crate::grammar::lexer::Lexer;
 use crate::grammar::symboltable::SymbolTable;
 use crate::grammar::token::{Token, TokenInfo};
 use crate::grammar::{Production, Symbol};
-use std::collections::HashMap;
+
+pub type NTProductionsMap = std::collections::HashMap<usize, Vec<usize>>;
 
 /// A parser to parse a representation of a context-free grammar
 struct Parser {
@@ -17,7 +18,7 @@ struct Parser {
 pub struct ParserOutput {
     pub symbol_table: SymbolTable,
     pub productions: Vec<Production>,
-    pub nt_productions: HashMap<usize, Vec<usize>>,
+    pub nt_productions: NTProductionsMap,
 }
 
 /// Parses the given representation of a context-free grammar
@@ -29,7 +30,7 @@ pub fn parse(input: &str) -> Result<ParserOutput> {
     let productions = parser.productions;
 
     // Generate map of productions for each non-terminal
-    let mut nt_productions: HashMap<usize, Vec<usize>> = HashMap::new();
+    let mut nt_productions = NTProductionsMap::new();
     for (i, prod) in productions.iter().enumerate() {
         nt_productions
             .entry(prod.head)

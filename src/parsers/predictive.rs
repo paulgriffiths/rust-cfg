@@ -3,12 +3,14 @@ use super::InputSymbol;
 use crate::errors::{Error, Result};
 use crate::grammar::{Grammar, Symbol};
 use std::collections::hash_map;
-use std::collections::HashMap;
+
+type TableEntry = std::collections::HashMap<InputSymbol, usize>;
+type ParseTable = std::collections::HashMap<usize, TableEntry>;
 
 /// A top-down predictive parser for LL(1) context-free grammars
 pub struct Parser<'p> {
     grammar: &'p Grammar,
-    table: HashMap<usize, HashMap<InputSymbol, usize>>,
+    table: ParseTable,
 }
 
 impl<'p> Parser<'p> {
@@ -19,9 +21,9 @@ impl<'p> Parser<'p> {
             return Err(Error::GrammarNotLL1);
         }
 
-        let mut table: HashMap<usize, HashMap<InputSymbol, usize>> = HashMap::new();
+        let mut table: ParseTable = ParseTable::new();
         for nt in grammar.non_terminal_ids() {
-            table.insert(*nt, HashMap::new());
+            table.insert(*nt, TableEntry::new());
         }
 
         let mut parser = Parser { grammar, table };

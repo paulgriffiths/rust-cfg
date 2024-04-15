@@ -1,3 +1,4 @@
+#[allow(dead_code)]
 /// Helper function to read in an entire test data file
 pub fn read_test_file(filename: &str) -> String {
     std::fs::read_to_string(test_file_path(filename)).expect("failed to read test file")

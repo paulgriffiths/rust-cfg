@@ -5,8 +5,8 @@ mod parser;
 mod symboltable;
 mod token;
 use crate::errors::Result;
-pub use firstfollow::{FirstItem, FollowItem};
-use std::collections::{HashMap, HashSet};
+pub use firstfollow::{FirstItem, FirstSet, FirstVector, FollowItem, FollowMap, FollowSet};
+use parser::NTProductionsMap;
 use symboltable::SymbolTable;
 
 /// A context-free grammar symbol
@@ -32,10 +32,10 @@ impl Production {
 /// A context-free grammar
 pub struct Grammar {
     pub productions: Vec<Production>,
-    pub symbol_table: SymbolTable,
-    pub nt_productions: HashMap<usize, Vec<usize>>,
-    pub firsts: Vec<HashSet<FirstItem>>,
-    pub follows: HashMap<usize, HashSet<FollowItem>>,
+    symbol_table: SymbolTable,
+    nt_productions: NTProductionsMap,
+    firsts: FirstVector,
+    follows: FollowMap,
 }
 
 impl Grammar {
@@ -63,7 +63,7 @@ impl Grammar {
 
     /// Returns FIRST(symbols) where symbols is a string of grammar symbols.
     /// Panics if any of the symbols are ϵ.
-    fn first(&self, symbols: &[Symbol], include_e: bool) -> (HashSet<FirstItem>, bool) {
+    fn first(&self, symbols: &[Symbol], include_e: bool) -> (FirstSet, bool) {
         // Extract symbol IDs
         let string: Vec<usize> = symbols
             .iter()
@@ -79,29 +79,29 @@ impl Grammar {
     }
 
     /// Returns FIRST(id) where id is the ID of a production.
-    pub fn first_production(&self, id: usize, include_e: bool) -> (HashSet<FirstItem>, bool) {
+    pub fn first_production(&self, id: usize, include_e: bool) -> (FirstSet, bool) {
         if self.productions[id].is_e() {
-            return (HashSet::new(), true);
+            return (FirstSet::new(), true);
         }
         self.first(&self.productions[id].body, include_e)
     }
 
     /// Returns FIRST(ids) where ids is a string of grammar symbol IDs
-    pub fn first_ids(&self, ids: &[usize]) -> HashSet<FirstItem> {
+    pub fn first_ids(&self, ids: &[usize]) -> FirstSet {
         let (set, _) = self.first_internal_ids(ids, true);
         set
     }
 
     /// Returns FIRST(ids) excluding ϵ where ids is a string of grammar symbol
     /// IDs. If ϵ is in FIRST(ids), the second return value will be true.
-    fn first_internal_ids(&self, ids: &[usize], include_e: bool) -> (HashSet<FirstItem>, bool) {
+    fn first_internal_ids(&self, ids: &[usize], include_e: bool) -> (FirstSet, bool) {
         // Algorithm adapted from Aho et el (2007) p.221
 
         if ids.is_empty() {
             panic!("first called with no symbols")
         }
 
-        let mut set: HashSet<FirstItem> = HashSet::new();
+        let mut set: FirstSet = FirstSet::new();
         for id in ids {
             // If FIRST(id) does not include ϵ then no later symbol can
             // affect FIRST(ids), so return
@@ -120,7 +120,7 @@ impl Grammar {
 
     /// Adds all elements of FIRST(id) to set, excluding ϵ. Returns true
     /// if ϵ is in FIRST(id).
-    fn first_excluding_e(&self, id: usize, set: &mut HashSet<FirstItem>) -> bool {
+    fn first_excluding_e(&self, id: usize, set: &mut FirstSet) -> bool {
         let mut has_empty = false;
 
         for c in &self.firsts[id] {
@@ -136,7 +136,7 @@ impl Grammar {
     }
 
     /// Returns FOLLOW(nt)
-    pub fn follow(&self, nt: usize) -> HashSet<FollowItem> {
+    pub fn follow(&self, nt: usize) -> FollowSet {
         self.follows.get(&nt).unwrap().clone()
     }
 
@@ -145,8 +145,8 @@ impl Grammar {
         // Algorithm adapted from Aho et al (2007) p.223
 
         for nt in self.non_terminal_ids() {
-            let mut all_firsts: HashSet<FirstItem> = HashSet::new();
-            let mut non_e_firsts: HashSet<FirstItem> = HashSet::new();
+            let mut all_firsts: FirstSet = FirstSet::new();
+            let mut non_e_firsts: FirstSet = FirstSet::new();
             let mut found_e = false;
 
             for p in self.productions_for_non_terminal(*nt) {
@@ -360,10 +360,10 @@ mod test {
         Ok(())
     }
 
-    /// Helper function to create a HashSet of FirstItem from a slice of
-    /// characters. FirstItem::Empty is included if include_empty is true.
-    fn first_char_set(chars: &[char], include_empty: bool) -> HashSet<FirstItem> {
-        let mut set: HashSet<FirstItem> = HashSet::from_iter(
+    /// Helper function to create a FirstSet from a slice of characters.
+    /// FirstItem::Empty is included if include_empty is true.
+    fn first_char_set(chars: &[char], include_empty: bool) -> FirstSet {
+        let mut set: FirstSet = FirstSet::from_iter(
             chars
                 .iter()
                 .map(|c| FirstItem::Character(*c))
@@ -378,10 +378,11 @@ mod test {
 
         set
     }
-    /// Helper function to create a HashSet of FollowItem from a slice of
-    /// characters. FollowItem::EndOfInput is included if include_end is true.
-    fn follow_char_set(chars: &[char], include_end: bool) -> HashSet<FollowItem> {
-        let mut set: HashSet<FollowItem> = HashSet::from_iter(
+
+    /// Helper function to create a FollowSet from a slice of characters.
+    /// FollowItem::EndOfInput is included if include_end is true.
+    fn follow_char_set(chars: &[char], include_end: bool) -> FollowSet {
+        let mut set: FollowSet = FollowSet::from_iter(
             chars
                 .iter()
                 .map(|c| FollowItem::Character(*c))

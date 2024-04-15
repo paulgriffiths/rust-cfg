@@ -62,6 +62,7 @@ impl SymbolTable {
         }
     }
 
+    #[allow(dead_code)]
     /// Returns true if the symbol table contains no symbols
     pub fn is_empty(&self) -> bool {
         self.len() == 0

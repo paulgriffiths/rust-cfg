@@ -1,6 +1,10 @@
 use super::symboltable::SymbolTable;
 use super::{Production, Symbol};
-use std::collections::{HashMap, HashSet};
+
+pub type FirstSet = std::collections::HashSet<FirstItem>;
+pub type FirstVector = Vec<FirstSet>;
+pub type FollowSet = std::collections::HashSet<FollowItem>;
+pub type FollowMap = std::collections::HashMap<usize, FollowSet>;
 
 #[derive(Debug, Eq, Hash, PartialEq, Clone, Copy)]
 /// An item in a FIRST set
@@ -18,8 +22,8 @@ pub enum FollowItem {
 
 /// Builds FIRST and FOLLOW sets for a context-free grammar
 pub struct Builder<'b> {
-    pub firsts: Vec<HashSet<FirstItem>>,
-    pub follows: HashMap<usize, HashSet<FollowItem>>,
+    pub firsts: FirstVector,
+    pub follows: FollowMap,
     symbol_table: &'b SymbolTable,
     productions: &'b [Production],
 }
@@ -28,13 +32,11 @@ impl<'b> Builder<'b> {
     /// Returns a new builder
     pub fn new(symbol_table: &'b SymbolTable, productions: &'b [Production]) -> Builder<'b> {
         // Build empty FIRST and FOLLOW sets
-        let firsts: Vec<_> = (0..symbol_table.len())
-            .map(|_| HashSet::<FirstItem>::new())
-            .collect();
+        let firsts: Vec<_> = (0..symbol_table.len()).map(|_| FirstSet::new()).collect();
 
-        let mut follows: HashMap<usize, HashSet<FollowItem>> = HashMap::new();
+        let mut follows: FollowMap = FollowMap::new();
         for i in symbol_table.non_terminal_ids() {
-            follows.insert(*i, HashSet::new());
+            follows.insert(*i, FollowSet::new());
         }
 
         let mut b = Builder {
@@ -103,7 +105,7 @@ impl<'b> Builder<'b> {
     /// Updates FIRST(non_terminal) with non-ϵ elements of FIRST(symbol).
     /// Returns true if FIRST(symbol) does contain ϵ.
     fn first_symbol(&mut self, non_terminal: usize, symbol: &Symbol) -> bool {
-        let mut additions: HashSet<FirstItem> = HashSet::new();
+        let mut additions: FirstSet = FirstSet::new();
         let mut has_empty = false;
 
         match symbol {
@@ -132,8 +134,8 @@ impl<'b> Builder<'b> {
     /// Returns FIRST(symbols) excluding ϵ. If FIRST(symbols) does include
     /// ϵ, the second return value will be true. ϵ itself must not be an
     /// element of symbols, and will result in a panic.
-    fn first_string(&self, symbols: &[Symbol]) -> (HashSet<FirstItem>, bool) {
-        let mut set: HashSet<FirstItem> = HashSet::new();
+    fn first_string(&self, symbols: &[Symbol]) -> (FirstSet, bool) {
+        let mut set: FirstSet = FirstSet::new();
 
         for symbol in symbols {
             match symbol {
@@ -155,7 +157,7 @@ impl<'b> Builder<'b> {
 
     /// Adds all elements of FIRST(symbol) to set, excluding ϵ. Returns
     /// true if ϵ is in FIRST(symbol).
-    fn first_excluding_e(&self, symbol: usize, set: &mut HashSet<FirstItem>) -> bool {
+    fn first_excluding_e(&self, symbol: usize, set: &mut FirstSet) -> bool {
         let mut has_empty = false;
 
         for c in &self.firsts[symbol] {
@@ -266,14 +268,14 @@ impl<'b> Builder<'b> {
 }
 
 /// Returns true if the intersection between two FIRST sets is empty
-pub fn firsts_distinct(first: &HashSet<FirstItem>, second: &HashSet<FirstItem>) -> bool {
+pub fn firsts_distinct(first: &FirstSet, second: &FirstSet) -> bool {
     first.intersection(second).peekable().peek().is_none()
 }
 
 /// Returns true if the intersection between the set of characters in a FIRST
 /// set and the set if characters in a FOLLOW set is empty
-pub fn first_follow_distinct(first: &HashSet<FirstItem>, follow: &HashSet<FollowItem>) -> bool {
-    let mut follow_set: HashSet<FirstItem> = HashSet::new();
+pub fn first_follow_distinct(first: &FirstSet, follow: &FollowSet) -> bool {
+    let mut follow_set: FirstSet = FirstSet::new();
     for item in follow {
         if let FollowItem::Character(c) = item {
             follow_set.insert(FirstItem::Character(*c));
@@ -289,16 +291,16 @@ mod test {
 
     #[test]
     fn test_firsts_distinct() {
-        let first: HashSet<FirstItem> =
-            HashSet::from([FirstItem::Character('a'), FirstItem::Character('b')]);
-        let second: HashSet<FirstItem> =
-            HashSet::from([FirstItem::Character('c'), FirstItem::Character('d')]);
+        let first: FirstSet =
+            FirstSet::from([FirstItem::Character('a'), FirstItem::Character('b')]);
+        let second: FirstSet =
+            FirstSet::from([FirstItem::Character('c'), FirstItem::Character('d')]);
         assert!(firsts_distinct(&first, &second));
 
-        let first: HashSet<FirstItem> =
-            HashSet::from([FirstItem::Character('a'), FirstItem::Character('b')]);
-        let second: HashSet<FirstItem> =
-            HashSet::from([FirstItem::Character('b'), FirstItem::Character('c')]);
+        let first: FirstSet =
+            FirstSet::from([FirstItem::Character('a'), FirstItem::Character('b')]);
+        let second: FirstSet =
+            FirstSet::from([FirstItem::Character('b'), FirstItem::Character('c')]);
         assert!(!firsts_distinct(&first, &second));
     }
 }
