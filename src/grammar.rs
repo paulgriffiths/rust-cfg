@@ -31,8 +31,8 @@ impl Production {
 
 /// A context-free grammar
 pub struct Grammar {
-    pub productions: Vec<Production>,
     symbol_table: SymbolTable,
+    productions: Vec<Production>,
     nt_productions: NTProductionsMap,
     firsts: FirstVector,
     follows: FollowMap,
@@ -217,6 +217,10 @@ impl Grammar {
     /// Returns the number of productions in the grammar
     pub fn num_productions(&self) -> usize {
         self.productions.len()
+    }
+
+    pub fn production(&self, i: usize) -> &Production {
+        &self.productions[i]
     }
 
     /// Returns a sorted slice of IDs for all productions for the given

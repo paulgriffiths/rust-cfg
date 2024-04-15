@@ -26,10 +26,10 @@ impl SymbolTable {
     pub fn new() -> SymbolTable {
         SymbolTable {
             symbols: Vec::new(),
-            terminals: HashMap::new(),
             non_terminals: HashMap::new(),
-            terminal_ids: Vec::new(),
+            terminals: HashMap::new(),
             non_terminal_ids: Vec::new(),
+            terminal_ids: Vec::new(),
         }
     }
 

@@ -46,7 +46,7 @@ impl<'b> Builder<'b> {
             follows,
         };
 
-        // Calculate FIRST and FOLLOW
+        // Calculate all FIRST and FOLLOW sets
         b.calculate_firsts();
         b.calculate_follows();
 

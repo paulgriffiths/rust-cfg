@@ -37,8 +37,8 @@ impl<'p> Parser<'p> {
     fn build_parse_table(&mut self) {
         // Algorithm adapted from Aho et al (2007) pp.224-225
 
-        for i in 0..self.grammar.productions.len() {
-            let head = self.grammar.productions[i].head;
+        for i in 0..self.grammar.num_productions() {
+            let head = self.grammar.production(i).head;
 
             // For each terminal a in FIRST(body), add the production to
             // table[head, a]
@@ -113,7 +113,7 @@ impl<'p> Parser<'p> {
 
     /// Parses the production with the given ID
     fn parse_production(&self, id: usize, reader: &mut Reader) -> Result<()> {
-        let production = &self.grammar.productions[id];
+        let production = self.grammar.production(id);
 
         // There's nothing to do for an ϵ-production
         if production.is_e() {
