@@ -44,7 +44,7 @@ impl<'p> Parser<'p> {
             // table[head, a]
             let (first, contains_e) = self.grammar.first_production(i, false);
             for s in first {
-                self.insert_entry(head, i, InputSymbol::from_first_item(s));
+                self.insert_entry(head, i, InputSymbol::from(s));
             }
 
             // If FIRST(body) contains ϵ, for each terminal or end-of-input
@@ -52,7 +52,7 @@ impl<'p> Parser<'p> {
             if contains_e {
                 let follow = self.grammar.follow(head);
                 for s in follow {
-                    self.insert_entry(head, i, InputSymbol::from_follow_item(s));
+                    self.insert_entry(head, i, InputSymbol::from(s));
                 }
             }
         }

@@ -1,6 +1,7 @@
 pub mod predictive;
 mod reader;
 use crate::grammar::{FirstItem, FollowItem};
+use std::convert::From;
 
 #[derive(Debug, Eq, Hash, PartialEq, Clone, Copy)]
 /// An input symbol, including the end-of-input marker
@@ -9,19 +10,20 @@ pub enum InputSymbol {
     EndOfInput,
 }
 
-impl InputSymbol {
-    /// Builds an InputSymbol from a FirstItem. Panics if the FirstItem is ϵ.
-    pub fn from_first_item(item: FirstItem) -> InputSymbol {
+impl From<FirstItem> for InputSymbol {
+    fn from(item: FirstItem) -> Self {
         match item {
             FirstItem::Character(c) => InputSymbol::Character(c),
             FirstItem::Empty => {
+                // Input symbols obviously cannot be empty
                 panic!("first item is empty");
             }
         }
     }
+}
 
-    /// Builds an InputSymbol from a FollowItem.
-    pub fn from_follow_item(item: FollowItem) -> InputSymbol {
+impl From<FollowItem> for InputSymbol {
+    fn from(item: FollowItem) -> Self {
         match item {
             FollowItem::Character(c) => InputSymbol::Character(c),
             FollowItem::EndOfInput => InputSymbol::EndOfInput,
