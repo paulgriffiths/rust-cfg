@@ -97,7 +97,7 @@ impl<'p> Parser<'p> {
         // Our grammar assumes the start symbol has ID zero, so choose the
         // first production based on the next input symbol and recursively
         // parse it
-        let p = self.choose_production(0, reader.lookahead())?;
+        let p = self.choose_production(self.grammar.start(), reader.lookahead())?;
         self.parse_production(p, &mut reader)?;
 
         // Ensure we consumed all the input during the parse

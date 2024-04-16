@@ -12,6 +12,7 @@ struct Parser {
     symbol_table: SymbolTable,
     productions: Vec<Production>,
     lookahead: Option<TokenInfo>,
+    start: usize,
 }
 
 /// The parser's output
@@ -19,6 +20,7 @@ pub struct ParserOutput {
     pub symbol_table: SymbolTable,
     pub productions: Vec<Production>,
     pub nt_productions: NTProductionsMap,
+    pub start: usize,
 }
 
 /// Parses the given representation of a context-free grammar
@@ -51,6 +53,7 @@ pub fn parse(input: &str) -> Result<ParserOutput> {
         symbol_table,
         productions,
         nt_productions,
+        start: parser.start,
     })
 }
 
@@ -62,6 +65,7 @@ impl Parser {
             symbol_table: SymbolTable::new(),
             productions: Vec::new(),
             lookahead: None,
+            start: 0, // Grammar assumes the first production is for the start symbol
         }
     }
 

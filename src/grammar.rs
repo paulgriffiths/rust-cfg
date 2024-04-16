@@ -36,13 +36,15 @@ pub struct Grammar {
     nt_productions: NTProductionsMap,
     firsts: FirstVector,
     follows: FollowMap,
+    start: usize,
 }
 
 impl Grammar {
     /// Creates a context-free grammar from a string representation
     pub fn new(input: &str) -> Result<Grammar> {
         let output = parser::parse(input)?;
-        let builder = firstfollow::Builder::new(&output.symbol_table, &output.productions);
+        let builder =
+            firstfollow::Builder::new(&output.symbol_table, &output.productions, output.start);
         let firsts = builder.firsts;
         let follows = builder.follows;
 
@@ -50,6 +52,7 @@ impl Grammar {
             symbol_table: output.symbol_table,
             productions: output.productions,
             nt_productions: output.nt_productions,
+            start: output.start,
             firsts,
             follows,
         })
@@ -229,6 +232,11 @@ impl Grammar {
         self.nt_productions.get(&i).unwrap()
     }
 
+    /// Returns the ID of the start symbol
+    pub fn start(&self) -> usize {
+        self.start
+    }
+
     /// Returns a sorted slice of the IDs of all terminals
     pub fn terminal_ids(&self) -> &[usize] {
         self.symbol_table.terminal_ids()
@@ -348,6 +356,14 @@ mod test {
             (11..37).collect::<Vec<usize>>()
         ); // letter
         assert_eq!(g.productions_for_non_terminal(11), vec![9, 10]); // IDr
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_start() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let g = Grammar::new_from_file(&test_file_path("grammars/nlr_simple_expr.cfg"))?;
+        assert_eq!(g.start(), 0);
 
         Ok(())
     }

@@ -30,7 +30,11 @@ pub struct Builder<'b> {
 
 impl<'b> Builder<'b> {
     /// Returns a new builder
-    pub fn new(symbol_table: &'b SymbolTable, productions: &'b [Production]) -> Builder<'b> {
+    pub fn new(
+        symbol_table: &'b SymbolTable,
+        productions: &'b [Production],
+        start: usize,
+    ) -> Builder<'b> {
         // Build empty FIRST and FOLLOW sets
         let firsts: Vec<_> = (0..symbol_table.len()).map(|_| FirstSet::new()).collect();
 
@@ -48,7 +52,7 @@ impl<'b> Builder<'b> {
 
         // Calculate all FIRST and FOLLOW sets
         b.calculate_firsts();
-        b.calculate_follows();
+        b.calculate_follows(start);
 
         b
     }
@@ -174,13 +178,14 @@ impl<'b> Builder<'b> {
         has_empty
     }
 
-    /// Calculates FOLLOW sets for all non-terminals
-    pub fn calculate_follows(&mut self) {
+    /// Calculates FOLLOW sets for all non-terminals. start is the ID of the
+    /// start symbol.
+    pub fn calculate_follows(&mut self, start: usize) {
         // This algorithm is adapted from Aho et al (2007) p.221-222
 
         // Insert end-of-input into the FOLLOW set for the start symbol
         self.follows
-            .get_mut(&0)
+            .get_mut(&start)
             .unwrap()
             .insert(FollowItem::EndOfInput);
 
