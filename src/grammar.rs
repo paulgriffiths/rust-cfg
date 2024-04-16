@@ -143,6 +143,29 @@ impl Grammar {
         self.follows.get(&nt).unwrap().clone()
     }
 
+    /// Returns a string representation of a production
+    pub fn format_production(&self, nt: usize) -> String {
+        let production = &self.production(nt);
+
+        let mut out = format!("{} →", self.non_terminal_name(production.head));
+
+        for s in &production.body {
+            match s {
+                Symbol::NonTerminal(id) => {
+                    out.push_str(format!(" {}", &self.non_terminal_name(*id)).as_str());
+                }
+                Symbol::Terminal(id) => {
+                    out.push_str(format!(" '{}'", &self.terminal_value(*id)).as_str());
+                }
+                Symbol::Empty => {
+                    out.push_str(" ϵ");
+                }
+            }
+        }
+
+        out
+    }
+
     /// Returns true if the grammar is an LL(1) grammar
     pub fn is_ll_one(&self) -> bool {
         // Algorithm adapted from Aho et al (2007) p.223
@@ -290,6 +313,26 @@ mod test {
             g.first_ids(&[1, 1, 3]),
             first_char_set(&['s', 'e', 'f', 'c'], false)
         ); // BBC
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_format_production() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let g = Grammar::new_from_file(&test_file_path("grammars/nlr_simple_expr.cfg"))?;
+
+        assert_eq!(g.format_production(0), "E → T Er");
+        assert_eq!(g.format_production(1), "Er → '+' T Er");
+        assert_eq!(g.format_production(2), "Er → ϵ");
+        assert_eq!(g.format_production(3), "T → F Tr");
+        assert_eq!(g.format_production(4), "Tr → '*' F Tr");
+        assert_eq!(g.format_production(5), "Tr → ϵ");
+        assert_eq!(g.format_production(6), "F → '(' E ')'");
+        assert_eq!(g.format_production(7), "F → ID");
+        assert_eq!(g.format_production(8), "ID → letter IDr");
+        assert_eq!(g.format_production(9), "IDr → ID");
+        assert_eq!(g.format_production(10), "IDr → ϵ");
+        assert_eq!(g.format_production(11), "letter → 'a'");
 
         Ok(())
     }
