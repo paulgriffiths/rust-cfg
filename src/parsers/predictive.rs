@@ -1,3 +1,4 @@
+use super::parsetree::{Child, Node, Tree};
 use super::reader::Reader;
 use super::InputSymbol;
 use crate::errors::{Error, Result};
@@ -87,18 +88,17 @@ impl<'p> Parser<'p> {
     }
 
     /// Parses an input string
-    pub fn parse(&self, input: &str) -> Result<()> {
+    pub fn parse(&self, input: &str) -> Result<Tree> {
         if input.is_empty() {
             return Err(Error::EmptyInput);
         }
 
+        let mut tree = Tree::new();
         let mut reader = Reader::new(input);
 
-        // Our grammar assumes the start symbol has ID zero, so choose the
-        // first production based on the next input symbol and recursively
-        // parse it
+        // Choose a production for the start symbol and recursively parse
         let p = self.choose_production(self.grammar.start(), reader.lookahead())?;
-        self.parse_production(p, &mut reader)?;
+        self.parse_production(p, &mut tree, &mut reader)?;
 
         // Ensure we consumed all the input during the parse
         if reader.lookahead() != InputSymbol::EndOfInput {
@@ -108,27 +108,34 @@ impl<'p> Parser<'p> {
             )));
         }
 
-        Ok(())
+        Ok(tree)
     }
 
-    /// Parses the production with the given ID
-    fn parse_production(&self, id: usize, reader: &mut Reader) -> Result<()> {
+    /// Parses the production with the given ID and returns a parse tree child
+    /// suitable for including in the parent node of the parse tree
+    fn parse_production(&self, id: usize, tree: &mut Tree, reader: &mut Reader) -> Result<Child> {
         let production = self.grammar.production(id);
 
-        // There's nothing to do for an ϵ-production
+        // There's nothing to do for an ϵ-production except return the parse
+        // tree node
         if production.is_e() {
-            return Ok(());
+            return Ok(Child::NonTerminal(tree.add(Node {
+                production: id,
+                children: vec![Child::Empty],
+            })));
         }
+
+        let mut children: Vec<Child> = Vec::with_capacity(production.body.len());
 
         // Non-terminals are processed left-to-right during a top-down parse
         for symbol in &production.body {
             match symbol {
                 Symbol::NonTerminal(n) => {
                     let p = self.choose_production(*n, reader.lookahead())?;
-                    self.parse_production(p, reader)?;
+                    children.push(self.parse_production(p, tree, reader)?);
                 }
                 Symbol::Terminal(n) => {
-                    self.parse_terminal(*n, reader)?;
+                    children.push(self.parse_terminal(*n, reader)?);
                 }
                 Symbol::Empty => {
                     // Shouldn't happen since we know we don't have an
@@ -138,11 +145,15 @@ impl<'p> Parser<'p> {
             }
         }
 
-        Ok(())
+        Ok(Child::NonTerminal(tree.add(Node {
+            production: id,
+            children,
+        })))
     }
 
-    /// Parses a terminal and consumes the matching input
-    fn parse_terminal(&self, id: usize, reader: &mut Reader) -> Result<()> {
+    /// Parses a terminal and consumes the matching input. Returns a parse tree
+    /// child suitable for including in the parent node of the parse tree
+    fn parse_terminal(&self, id: usize, reader: &mut Reader) -> Result<Child> {
         let value = self.grammar.terminal_value(id);
         let mut read = String::with_capacity(value.len());
 
@@ -157,7 +168,7 @@ impl<'p> Parser<'p> {
             }
         }
 
-        Ok(())
+        Ok(Child::Terminal(value))
     }
 }
 
@@ -175,11 +186,30 @@ mod test {
     }
 
     #[test]
-    fn test_parse() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    fn test_parse_tree() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let g = Grammar::new_from_file(&test_file_path("grammars/nlr_simple_expr.cfg"))?;
         let parser = Parser::new(&g)?;
-        parser.parse("three+four")?;
-        parser.parse("three+four*seven")?;
+
+        let tree = parser.parse("a+b")?;
+        assert_eq!(tree.frontier(), "a+b");
+        assert_eq!(
+            tree.visualize(&g),
+            concat!(
+                "E→[T→[F→[ID→[letter→['a'] IDr→[ϵ]]] Tr→[ϵ]] ",
+                "Er→['+' T→[F→[ID→[letter→['b'] IDr→[ϵ]]] Tr→[ϵ]] Er→[ϵ]]]"
+            )
+        );
+
+        let tree = parser.parse("a+b*c")?;
+        assert_eq!(tree.frontier(), "a+b*c");
+        assert_eq!(
+            tree.visualize(&g),
+            concat!(
+                "E→[T→[F→[ID→[letter→['a'] IDr→[ϵ]]] Tr→[ϵ]] ",
+                "Er→['+' T→[F→[ID→[letter→['b'] IDr→[ϵ]]] ",
+                "Tr→['*' F→[ID→[letter→['c'] IDr→[ϵ]]] Tr→[ϵ]]] Er→[ϵ]]]"
+            )
+        );
 
         Ok(())
     }
