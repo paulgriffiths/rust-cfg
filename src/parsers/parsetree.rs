@@ -3,7 +3,8 @@ use crate::grammar::Grammar;
 /// A parse tree
 pub struct Tree {
     pub nodes: Vec<Node>,
-    pub root: usize,
+    pub root: isize,
+    stack: Vec<isize>,
 }
 
 /// A node in a parse tree
@@ -30,15 +31,27 @@ impl Tree {
     pub fn new() -> Tree {
         Tree {
             nodes: Vec::new(),
-            root: 0,
+            root: -1,
+            stack: Vec::new(),
         }
     }
 
     /// Adds a new root node to the tree and returns its ID
     pub fn add(&mut self, n: Node) -> usize {
-        self.root = self.nodes.len();
+        self.root = self.nodes.len() as isize;
         self.nodes.push(n);
-        self.root
+        self.root.try_into().unwrap()
+    }
+
+    /// Restores the parse tree to its most recently saved state
+    pub fn restore(&mut self) {
+        self.root = self.stack.pop().expect("stack empty!");
+        self.nodes.truncate((self.root + 1).try_into().unwrap());
+    }
+
+    /// Saves the state of the parse tree
+    pub fn save(&mut self) {
+        self.stack.push(self.root);
     }
 
     /// Returns a simple, one-line string representation of the parse tree,
@@ -80,7 +93,7 @@ impl Tree {
             s.push(']');
         }
 
-        traverse(self, self.root, g, &mut output);
+        traverse(self, self.root as usize, g, &mut output);
 
         output
     }
@@ -108,7 +121,7 @@ impl Tree {
             }
         }
 
-        traverse(self, self.root, &mut output);
+        traverse(self, self.root as usize, &mut output);
 
         output
     }
@@ -138,6 +151,9 @@ mod test {
                 Child::NonTerminal(n2),
             ],
         });
+
+        tree.save();
+
         let n4 = tree.add(Node {
             production: 0,
             children: vec![Child::Terminal(String::from("5"))],
@@ -156,5 +172,9 @@ mod test {
         });
 
         assert_eq!(tree.frontier(), "5+3*4");
+
+        tree.restore();
+
+        assert_eq!(tree.frontier(), "3*4");
     }
 }

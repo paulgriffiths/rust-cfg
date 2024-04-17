@@ -12,6 +12,7 @@ pub enum Error {
     ExpectedGrammarSymbol,
     ExpectedNonTerminal,
     ExpectedProductionSymbol,
+    GrammarLeftRecursive,
     GrammarNotLL1,
     NonTerminalNoProductions(String),
     ParseError(String),
@@ -34,6 +35,7 @@ impl fmt::Display for Error {
             Error::ExpectedGrammarSymbol => write!(f, "expected grammar symbol"),
             Error::ExpectedNonTerminal => write!(f, "expected non-terminal"),
             Error::ExpectedProductionSymbol => write!(f, "expected production symbol"),
+            Error::GrammarLeftRecursive => write!(f, "grammar is left recursive"),
             Error::GrammarNotLL1 => write!(f, "grammar is not LL(1)"),
             Error::NonTerminalNoProductions(s) => {
                 write!(f, "no productions found for non-terminal '{}'", s)

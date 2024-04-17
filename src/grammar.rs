@@ -462,6 +462,7 @@ mod test {
             ),
             ("grammars/is_ll_one/is_ll_one_follow_good.cfg", true),
             ("grammars/is_ll_one/is_ll_one_follow_bad.cfg", false),
+            ("grammars/equal_bits.cfg", false),
         ] {
             let g = Grammar::new_from_file(&test_file_path(path))?;
             assert_eq!(g.is_ll_one(), want, "{}", path);
