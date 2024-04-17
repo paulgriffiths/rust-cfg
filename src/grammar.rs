@@ -278,7 +278,7 @@ mod test {
 
     #[test]
     fn test_first_ids() -> std::result::Result<(), Box<dyn std::error::Error>> {
-        let g = Grammar::new_from_file(&test_file_path("grammars/simple_first.cfg"))?;
+        let g = Grammar::new_from_file(&test_file_path("grammars/first_follow/simple_first.cfg"))?;
 
         assert_eq!(
             g.first_ids(&[0]),
@@ -339,7 +339,7 @@ mod test {
 
     #[test]
     fn test_follow() -> std::result::Result<(), Box<dyn std::error::Error>> {
-        let g = Grammar::new_from_file(&test_file_path("grammars/simple_follow.cfg"))?;
+        let g = Grammar::new_from_file(&test_file_path("grammars/first_follow/simple_follow.cfg"))?;
         assert_eq!(g.non_terminal_ids().len(), 18);
         assert_eq!(g.num_productions(), 26);
 
@@ -367,11 +367,27 @@ mod test {
 
     #[test]
     fn test_is_ll_one() -> std::result::Result<(), Box<dyn std::error::Error>> {
-        let g = Grammar::new_from_file(&test_file_path("grammars/nlr_simple_expr.cfg"))?;
-        assert!(g.is_ll_one());
-
-        let g = Grammar::new_from_file(&test_file_path("grammars/lr_simple_expr.cfg"))?;
-        assert!(!g.is_ll_one());
+        for (path, want) in [
+            ("grammars/nlr_simple_expr.cfg", true),
+            ("grammars/lr_simple_expr.cfg", false),
+            ("grammars/adventure.cfg", true),
+            ("grammars/is_ll_one/is_ll_one_two_e_good.cfg", true),
+            ("grammars/is_ll_one/is_ll_one_two_e_bad.cfg", false),
+            ("grammars/is_ll_one/is_ll_one_two_e_bad_2.cfg", false),
+            (
+                "grammars/is_ll_one/is_ll_one_firsts_distinct_good.cfg",
+                true,
+            ),
+            (
+                "grammars/is_ll_one/is_ll_one_firsts_distinct_bad.cfg",
+                false,
+            ),
+            ("grammars/is_ll_one/is_ll_one_follow_good.cfg", true),
+            ("grammars/is_ll_one/is_ll_one_follow_bad.cfg", false),
+        ] {
+            let g = Grammar::new_from_file(&test_file_path(path))?;
+            assert_eq!(g.is_ll_one(), want, "{}", path);
+        }
 
         Ok(())
     }
