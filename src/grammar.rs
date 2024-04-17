@@ -7,6 +7,7 @@ mod token;
 use crate::errors::Result;
 pub use firstfollow::{FirstItem, FirstSet, FirstVector, FollowItem, FollowMap, FollowSet};
 use parser::NTProductionsMap;
+use std::collections::HashSet;
 use symboltable::SymbolTable;
 
 /// A context-free grammar symbol
@@ -164,6 +165,64 @@ impl Grammar {
         }
 
         out
+    }
+
+    /// Returns true if the grammar is left recursive, that is, if there is a
+    /// non-terminal A such that there is a derivation of A ⇒ A𝛼 for some
+    /// string 𝛼.
+    pub fn is_left_recursive(&self) -> bool {
+        // Recursively walks the productions of the leftmost grammar symbol in
+        // the body of production p if that symbol is a non-terminal, looking
+        // for non-terminal target
+        fn walk_productions(
+            g: &Grammar,
+            target: usize,
+            p: usize,
+            seen: &mut HashSet<usize>,
+        ) -> bool {
+            let production = &g.production(p);
+
+            let Symbol::NonTerminal(nt) = production.body[0] else {
+                // This production cannot result in left recursion if the
+                // leftmost symbol is not a non-terminal
+                return false;
+            };
+
+            if nt == target {
+                // If the target non-terminal appears at the left of this
+                // production, then the grammar is left recursive
+                return true;
+            } else if seen.contains(&nt) {
+                // If we've already seen this non-terminal during the current
+                // search, there's no need to check it again, and doing so will
+                // result in an infinite loop
+                return false;
+            }
+
+            // Record that we've seen this non-terminal during the current
+            // search, and recursively search all of its productions
+            seen.insert(nt);
+            for next in g.productions_for_non_terminal(nt) {
+                if walk_productions(g, target, *next, seen) {
+                    return true;
+                }
+            }
+
+            false
+        }
+
+        // Check all productions for left recursion
+        for p in 0..self.num_productions() {
+            // For each production we check, we need to keep track of the
+            // non-terminals we've already seen on the left of productions,
+            // so we can terminate the search if we see it again
+            let mut seen: HashSet<usize> = HashSet::new();
+            if walk_productions(self, self.production(p).head, p, &mut seen) {
+                return true;
+            }
+        }
+
+        false
     }
 
     /// Returns true if the grammar is an LL(1) grammar
@@ -361,6 +420,25 @@ mod test {
         assert_eq!(g.follow(15), follow_char_set(&['h'], false)); // G
         assert_eq!(g.follow(16), follow_char_set(&['i'], true)); // H
         assert_eq!(g.follow(17), follow_char_set(&[], true)); // I
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_is_left_recursive() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        for (path, want) in [
+            ("grammars/nlr_simple_expr.cfg", false),
+            ("grammars/lr_simple_expr.cfg", true),
+            ("grammars/adventure.cfg", false),
+            ("grammars/left_recursion/left_recursive_one.cfg", true),
+            ("grammars/left_recursion/non_left_recursive_one.cfg", false),
+            ("grammars/balanced_parentheses.cfg", true),
+            ("grammars/nested_lists.cfg", true),
+            ("grammars/equal_bits.cfg", false),
+        ] {
+            let g = Grammar::new_from_file(&test_file_path(path))?;
+            assert_eq!(g.is_left_recursive(), want, "{}", path);
+        }
 
         Ok(())
     }
