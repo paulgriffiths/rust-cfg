@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 /// A reference entry in the symbol table
+#[derive(Debug, Clone)]
 enum Symbol {
     Terminal(String),
     NonTerminal(String),
@@ -59,6 +60,23 @@ impl SymbolTable {
             self.non_terminal_ids.push(index);
             self.symbols.push(Symbol::NonTerminal(value.to_string()));
             index
+        }
+    }
+
+    /// Returns true if the symbol table contains a non-terminal with the
+    /// given name
+    pub fn contains_non_terminal_name(&self, name: &str) -> bool {
+        self.non_terminals.contains_key(name)
+    }
+
+    /// Returns a deep copy of the symbol table
+    pub fn deep_copy(&self) -> SymbolTable {
+        SymbolTable {
+            symbols: self.symbols.clone(),
+            terminals: self.terminals.clone(),
+            non_terminals: self.non_terminals.clone(),
+            terminal_ids: self.terminal_ids.clone(),
+            non_terminal_ids: self.non_terminal_ids.clone(),
         }
     }
 

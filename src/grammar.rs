@@ -10,8 +10,8 @@ use parser::NTProductionsMap;
 use std::collections::HashSet;
 use symboltable::SymbolTable;
 
-#[derive(Debug, Clone, Copy)]
 /// A context-free grammar symbol
+#[derive(Debug, Clone, Copy)]
 pub enum Symbol {
     NonTerminal(usize),
     Terminal(usize),
@@ -36,6 +36,7 @@ impl PartialEq for Symbol {
 }
 
 /// A context-free grammar production
+#[derive(Debug, Clone)]
 pub struct Production {
     pub head: usize,
     pub body: Vec<Symbol>,
@@ -81,6 +82,44 @@ impl Grammar {
     /// with the given path
     pub fn new_from_file(path: &str) -> std::result::Result<Grammar, Box<dyn std::error::Error>> {
         Ok(Grammar::new(&std::fs::read_to_string(path)?)?)
+    }
+
+    /// Returns an augmented grammar, with a new start symbol Saug and a new
+    /// production Saug → S, where S is the previous start symbol
+    fn augment(&self) -> Grammar {
+        let mut symbol_table = self.symbol_table.deep_copy();
+        let mut productions = self.productions.clone();
+        let mut nt_productions = self.nt_productions.clone();
+
+        // Calculate a name for the new start symbol by beginning with 'Saug'
+        // and adding as many underscores as we need until we find a name which
+        // is not already in the symbol table
+        let mut name = String::from("Saug");
+        while symbol_table.contains_non_terminal_name(&name) {
+            name.push('_');
+        }
+
+        // Add the new non-terminal and a new production
+        let id = symbol_table.add_non_terminal(&name);
+        productions.push(Production {
+            head: id,
+            body: vec![Symbol::NonTerminal(self.start())],
+        });
+        nt_productions.insert(id, vec![productions.len() - 1]);
+
+        // Recalculate FIRST and FOLLOW sets
+        let builder = firstfollow::Builder::new(&symbol_table, &productions, id);
+        let firsts = builder.firsts;
+        let follows = builder.follows;
+
+        Grammar {
+            symbol_table,
+            productions,
+            nt_productions,
+            start: id,
+            firsts,
+            follows,
+        }
     }
 
     /// Returns FIRST(symbols) where symbols is a string of grammar symbols.
@@ -352,6 +391,72 @@ impl Grammar {
 mod test {
     use super::*;
     use crate::test::test_file_path;
+
+    #[test]
+    fn test_aug() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let g = Grammar::new_from_file(&test_file_path("grammars/balanced_parentheses.cfg"))?;
+        assert_eq!(g.start(), 0);
+        assert_eq!(g.num_productions(), 2);
+        assert_eq!(g.format_production(0), "S → S '(' S ')' S");
+        assert_eq!(g.format_production(1), "S → ϵ");
+        assert_eq!(g.productions_for_non_terminal(0), vec![0, 1]);
+        assert_eq!(
+            g.first_ids(&[0]),
+            FirstSet::from([FirstItem::Character('('), FirstItem::Empty])
+        );
+        assert_eq!(
+            g.first_ids(&[1]),
+            FirstSet::from([FirstItem::Character('(')])
+        );
+        assert_eq!(
+            g.first_ids(&[2]),
+            FirstSet::from([FirstItem::Character(')')])
+        );
+        assert_eq!(
+            g.follow(0),
+            FollowSet::from([
+                FollowItem::Character('('),
+                FollowItem::Character(')'),
+                FollowItem::EndOfInput
+            ])
+        );
+
+        let g = g.augment();
+        assert_eq!(g.start(), 3);
+        assert_eq!(g.num_productions(), 3);
+        assert_eq!(g.format_production(0), "S → S '(' S ')' S");
+        assert_eq!(g.format_production(1), "S → ϵ");
+        assert_eq!(g.format_production(2), "Saug → S");
+        assert_eq!(g.productions_for_non_terminal(0), vec![0, 1]);
+        assert_eq!(g.productions_for_non_terminal(3), vec![2]);
+        assert_eq!(
+            g.first_ids(&[0]),
+            FirstSet::from([FirstItem::Character('('), FirstItem::Empty])
+        );
+        assert_eq!(
+            g.first_ids(&[1]),
+            FirstSet::from([FirstItem::Character('(')])
+        );
+        assert_eq!(
+            g.first_ids(&[2]),
+            FirstSet::from([FirstItem::Character(')')])
+        );
+        assert_eq!(
+            g.first_ids(&[3]),
+            FirstSet::from([FirstItem::Character('('), FirstItem::Empty])
+        );
+        assert_eq!(
+            g.follow(0),
+            FollowSet::from([
+                FollowItem::Character('('),
+                FollowItem::Character(')'),
+                FollowItem::EndOfInput
+            ])
+        );
+        assert_eq!(g.follow(3), FollowSet::from([FollowItem::EndOfInput]));
+
+        Ok(())
+    }
 
     #[test]
     fn test_first_ids() -> std::result::Result<(), Box<dyn std::error::Error>> {
