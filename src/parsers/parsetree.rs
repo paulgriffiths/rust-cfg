@@ -2,9 +2,9 @@ use crate::grammar::Grammar;
 
 /// A parse tree
 pub struct Tree {
+    pub root: Option<usize>,
     pub nodes: Vec<Node>,
-    pub root: isize,
-    stack: Vec<isize>,
+    stack: Vec<Option<usize>>,
 }
 
 /// A node in a parse tree
@@ -30,23 +30,27 @@ impl Tree {
     /// Creates a new parse tree
     pub fn new() -> Tree {
         Tree {
+            root: None,
             nodes: Vec::new(),
-            root: -1,
             stack: Vec::new(),
         }
     }
 
     /// Adds a new root node to the tree and returns its ID
     pub fn add(&mut self, n: Node) -> usize {
-        self.root = self.nodes.len() as isize;
+        let new_root = self.nodes.len();
+        self.root = Some(new_root);
         self.nodes.push(n);
-        self.root.try_into().unwrap()
+        new_root
     }
 
     /// Restores the parse tree to its most recently saved state
     pub fn restore(&mut self) {
         self.root = self.stack.pop().expect("stack empty!");
-        self.nodes.truncate((self.root + 1).try_into().unwrap());
+        self.nodes.truncate(match self.root {
+            Some(n) => n + 1,
+            None => 0,
+        });
     }
 
     /// Saves the state of the parse tree
@@ -93,7 +97,10 @@ impl Tree {
             s.push(']');
         }
 
-        traverse(self, self.root as usize, g, &mut output);
+        // Return the empty string if the tree is empty
+        if let Some(root) = self.root {
+            traverse(self, root, g, &mut output);
+        }
 
         output
     }
@@ -121,7 +128,10 @@ impl Tree {
             }
         }
 
-        traverse(self, self.root as usize, &mut output);
+        // Return the empty string if the tree is empty
+        if let Some(root) = self.root {
+            traverse(self, root, &mut output);
+        }
 
         output
     }
