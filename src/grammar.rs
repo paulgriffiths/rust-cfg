@@ -10,11 +10,29 @@ use parser::NTProductionsMap;
 use std::collections::HashSet;
 use symboltable::SymbolTable;
 
+#[derive(Debug, Clone, Copy)]
 /// A context-free grammar symbol
 pub enum Symbol {
     NonTerminal(usize),
     Terminal(usize),
     Empty,
+}
+
+impl PartialEq for Symbol {
+    /// Tests two symbols for equality.
+    fn eq(&self, other: &Symbol) -> bool {
+        match self {
+            Symbol::NonTerminal(x) => match other {
+                Symbol::NonTerminal(y) => x == y,
+                _ => false,
+            },
+            Symbol::Terminal(x) => match other {
+                Symbol::Terminal(y) => x == y,
+                _ => false,
+            },
+            Symbol::Empty => matches!(other, Symbol::Empty),
+        }
+    }
 }
 
 /// A context-free grammar production

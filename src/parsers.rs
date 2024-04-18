@@ -1,7 +1,9 @@
+mod items;
 pub mod parsetree;
 pub mod predictive;
 mod reader;
 pub mod recursivedescent;
+pub mod simplelr;
 use crate::grammar::{FirstItem, FollowItem};
 use std::convert::From;
 
