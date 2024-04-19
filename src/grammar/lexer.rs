@@ -11,7 +11,7 @@ pub struct Lexer {
     cursor: usize,
     position: Position,
     production_started: bool,
-    terminal_tokens: Option<VecDeque<TokenInfo>>,
+    stored_tokens: VecDeque<TokenInfo>,
 }
 
 impl Lexer {
@@ -22,7 +22,7 @@ impl Lexer {
             cursor: 0,
             position: Position::new(),
             production_started: false,
-            terminal_tokens: None,
+            stored_tokens: VecDeque::new(),
         }
     }
 
@@ -127,8 +127,8 @@ impl Lexer {
     /// Returns the next lexical token, if any
     pub fn next_token(&mut self, symbol_table: &mut SymbolTable) -> Result<Option<TokenInfo>> {
         // Return the next stored terminal token, if there is one
-        if let Some(stored_terminal) = self.next_stored_terminal_token() {
-            return Ok(Some(stored_terminal));
+        if let Some(token) = self.stored_tokens.pop_front() {
+            return Ok(Some(token));
         }
 
         // Discard comments and whitespace first, so that this method always
@@ -238,7 +238,7 @@ impl Lexer {
                         }
 
                         self.store_terminal_tokens(symbol_table, initial, &terminal);
-                        return Ok(self.next_stored_terminal_token());
+                        return Ok(self.stored_tokens.pop_front());
                     }
                     _ => {
                         // Otherwise, read the character into the terminal
@@ -260,29 +260,14 @@ impl Lexer {
         mut initial: InputInfo,
         terminal: &Vec<char>,
     ) {
-        let mut tokens = VecDeque::<TokenInfo>::new();
         for c in terminal {
             initial.position.advance(false);
-            tokens.push_back(
+            self.stored_tokens.push_back(
                 initial
                     .token(Token::Terminal(symbol_table.add_terminal(*c)))
                     .unwrap(),
             );
         }
-
-        self.terminal_tokens = Some(tokens);
-    }
-
-    /// Returns the next stored terminal token, or None if there are no
-    /// more stored tokens
-    fn next_stored_terminal_token(&mut self) -> Option<TokenInfo> {
-        let remaining_tokens = self.terminal_tokens.as_mut()?;
-        let Some(token) = remaining_tokens.pop_front() else {
-            self.terminal_tokens = None;
-            return None;
-        };
-
-        Some(token)
     }
 
     /// Reads and returns the next input character without checking if we're
