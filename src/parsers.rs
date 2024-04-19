@@ -2,16 +2,26 @@ mod items;
 pub mod parsetree;
 //pub mod predictive;
 mod reader;
-//pub mod recursivedescent;
+pub mod recursivedescent;
 //pub mod simplelr;
 use crate::grammar::{FirstItem, FollowItem};
 use std::convert::From;
+use std::fmt;
 
 #[derive(Debug, Eq, Hash, PartialEq, Clone, Copy)]
 /// An input symbol, including the end-of-input marker
 pub enum InputSymbol {
     Character(char),
     EndOfInput,
+}
+
+impl fmt::Display for InputSymbol {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            InputSymbol::Character(c) => write!(f, "{}", c),
+            InputSymbol::EndOfInput => write!(f, "<EOF>"),
+        }
+    }
 }
 
 impl From<FirstItem> for InputSymbol {

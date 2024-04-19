@@ -16,7 +16,7 @@ pub struct Node {
 /// A child of a parse tree node
 pub enum Child {
     NonTerminal(usize),
-    Terminal(String),
+    Terminal(char),
     Empty,
 }
 
@@ -121,7 +121,7 @@ impl Tree {
                         traverse(tree, *next, s);
                     }
                     Child::Terminal(value) => {
-                        s.push_str(value);
+                        s.push(*value);
                     }
                     Child::Empty => (),
                 }
@@ -147,17 +147,17 @@ mod test {
 
         let n1 = tree.add(Node {
             production: 0,
-            children: vec![Child::Terminal(String::from("3"))],
+            children: vec![Child::Terminal('3')],
         });
         let n2 = tree.add(Node {
             production: 0,
-            children: vec![Child::Terminal(String::from("4"))],
+            children: vec![Child::Terminal('4')],
         });
         let n3 = tree.add(Node {
             production: 1,
             children: vec![
                 Child::NonTerminal(n1),
-                Child::Terminal(String::from("*")),
+                Child::Terminal('*'),
                 Child::NonTerminal(n2),
             ],
         });
@@ -166,13 +166,13 @@ mod test {
 
         let n4 = tree.add(Node {
             production: 0,
-            children: vec![Child::Terminal(String::from("5"))],
+            children: vec![Child::Terminal('5')],
         });
         let n5 = tree.add(Node {
             production: 2,
             children: vec![
                 Child::NonTerminal(n4),
-                Child::Terminal(String::from("+")),
+                Child::Terminal('+'),
                 Child::NonTerminal(n3),
             ],
         });
