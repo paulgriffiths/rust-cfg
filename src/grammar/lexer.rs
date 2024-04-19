@@ -3,6 +3,7 @@ use crate::grammar::input_info::InputInfo;
 use crate::grammar::symboltable::SymbolTable;
 use crate::grammar::token::{Token, TokenInfo};
 use crate::position::Position;
+use std::collections::VecDeque;
 
 /// A lexer for a context-free grammar parser
 pub struct Lexer {
@@ -10,6 +11,7 @@ pub struct Lexer {
     cursor: usize,
     position: Position,
     production_started: bool,
+    terminal_tokens: Option<VecDeque<TokenInfo>>,
 }
 
 impl Lexer {
@@ -20,6 +22,7 @@ impl Lexer {
             cursor: 0,
             position: Position::new(),
             production_started: false,
+            terminal_tokens: None,
         }
     }
 
@@ -123,6 +126,11 @@ impl Lexer {
 
     /// Returns the next lexical token, if any
     pub fn next_token(&mut self, symbol_table: &mut SymbolTable) -> Result<Option<TokenInfo>> {
+        // Return the next stored terminal token, if there is one
+        if let Some(stored_terminal) = self.next_stored_terminal_token() {
+            return Ok(Some(stored_terminal));
+        }
+
         // Discard comments and whitespace first, so that this method always
         // returns a token or end-of-input
         if let Some(token) = self.discard_comments_and_whitespace() {
@@ -186,7 +194,7 @@ impl Lexer {
 
         // We don't store the beginning or ending quote characters in the
         // value of the terminal
-        let mut terminal = vec![];
+        let mut terminal = Vec::new();
 
         while self.lookahead().is_some() {
             let c = self.read();
@@ -229,8 +237,8 @@ impl Lexer {
                             return Err(Error::EmptyTerminal);
                         }
 
-                        let s: String = terminal.into_iter().collect();
-                        return Ok(initial.token(Token::Terminal(symbol_table.add_terminal(&s))));
+                        self.store_terminal_tokens(symbol_table, initial, &terminal);
+                        return Ok(self.next_stored_terminal_token());
                     }
                     _ => {
                         // Otherwise, read the character into the terminal
@@ -242,6 +250,39 @@ impl Lexer {
 
         // End-of-input and we haven't seen a terminating quote character yet
         Err(Error::UnterminatedTerminal)
+    }
+
+    /// Stores the characters in a terminal string as tokens for individual
+    /// characters, so that they may be sequentially returned
+    fn store_terminal_tokens(
+        &mut self,
+        symbol_table: &mut SymbolTable,
+        mut initial: InputInfo,
+        terminal: &Vec<char>,
+    ) {
+        let mut tokens = VecDeque::<TokenInfo>::new();
+        for c in terminal {
+            initial.position.advance(false);
+            tokens.push_back(
+                initial
+                    .token(Token::Terminal(symbol_table.add_terminal(*c)))
+                    .unwrap(),
+            );
+        }
+
+        self.terminal_tokens = Some(tokens);
+    }
+
+    /// Returns the next stored terminal token, or None if there are no
+    /// more stored tokens
+    fn next_stored_terminal_token(&mut self) -> Option<TokenInfo> {
+        let remaining_tokens = self.terminal_tokens.as_mut()?;
+        let Some(token) = remaining_tokens.pop_front() else {
+            self.terminal_tokens = None;
+            return None;
+        };
+
+        Some(token)
     }
 
     /// Reads and returns the next input character without checking if we're
@@ -452,7 +493,7 @@ mod test {
                 token: Token::Terminal(2),
                 position: Position {
                     line: 1,
-                    position: 7
+                    position: 8
                 },
             })
         );
@@ -482,7 +523,7 @@ mod test {
                 token: Token::Terminal(4),
                 position: Position {
                     line: 1,
-                    position: 15
+                    position: 16
                 },
             })
         );
@@ -502,7 +543,7 @@ mod test {
                 token: Token::Terminal(2),
                 position: Position {
                     line: 1,
-                    position: 21
+                    position: 22
                 },
             })
         );
@@ -534,9 +575,9 @@ mod test {
         assert_eq!(table.len(), 5);
         assert_eq!(table.non_terminal_value(0), "A");
         assert_eq!(table.non_terminal_value(1), "B");
-        assert_eq!(table.terminal_value(2), "c");
+        assert_eq!(table.terminal_value(2), 'c');
         assert_eq!(table.non_terminal_value(3), "D");
-        assert_eq!(table.terminal_value(4), "e");
+        assert_eq!(table.terminal_value(4), 'e');
 
         Ok(())
     }
@@ -872,71 +913,168 @@ mod test {
         assert_eq!(
             lex.next_token(&mut table)?,
             Some(TokenInfo {
-                token: Token::Terminal(0),
+                token: Token::Terminal(0), // a
                 position: Position {
                     line: 1,
-                    position: 1
+                    position: 2
                 },
             })
         );
         assert_eq!(
             lex.next_token(&mut table)?,
             Some(TokenInfo {
-                token: Token::Terminal(1),
+                token: Token::Terminal(1), // b
                 position: Position {
                     line: 1,
-                    position: 5
+                    position: 6
                 },
             })
         );
         assert_eq!(
             lex.next_token(&mut table)?,
             Some(TokenInfo {
-                token: Token::Terminal(0),
+                token: Token::Terminal(0), // a
                 position: Position {
                     line: 1,
-                    position: 9
+                    position: 10,
                 },
             })
         );
         assert_eq!(
             lex.next_token(&mut table)?,
             Some(TokenInfo {
-                token: Token::Terminal(2),
+                token: Token::Terminal(2), // "
                 position: Position {
                     line: 1,
-                    position: 13,
+                    position: 14,
                 },
             })
         );
         assert_eq!(
             lex.next_token(&mut table)?,
             Some(TokenInfo {
-                token: Token::Terminal(3),
+                token: Token::Terminal(3), // c
                 position: Position {
                     line: 1,
-                    position: 19
+                    position: 15
                 },
             })
         );
         assert_eq!(
             lex.next_token(&mut table)?,
             Some(TokenInfo {
-                token: Token::Terminal(4),
+                token: Token::Terminal(2), // "
                 position: Position {
                     line: 1,
-                    position: 25
+                    position: 16
+                },
+            })
+        );
+        assert_eq!(
+            lex.next_token(&mut table)?,
+            Some(TokenInfo {
+                token: Token::Terminal(4), // '
+                position: Position {
+                    line: 1,
+                    position: 20
+                },
+            })
+        );
+        assert_eq!(
+            lex.next_token(&mut table)?,
+            Some(TokenInfo {
+                token: Token::Terminal(5), // d
+                position: Position {
+                    line: 1,
+                    position: 21
+                },
+            })
+        );
+        assert_eq!(
+            lex.next_token(&mut table)?,
+            Some(TokenInfo {
+                token: Token::Terminal(4), // '
+                position: Position {
+                    line: 1,
+                    position: 22
+                },
+            })
+        );
+        assert_eq!(
+            lex.next_token(&mut table)?,
+            Some(TokenInfo {
+                token: Token::Terminal(6), // e
+                position: Position {
+                    line: 1,
+                    position: 26
+                },
+            })
+        );
+        assert_eq!(
+            lex.next_token(&mut table)?,
+            Some(TokenInfo {
+                token: Token::Terminal(7), // \\
+                position: Position {
+                    line: 1,
+                    position: 27
+                },
+            })
+        );
+        assert_eq!(
+            lex.next_token(&mut table)?,
+            Some(TokenInfo {
+                token: Token::Terminal(8), // \t
+                position: Position {
+                    line: 1,
+                    position: 28
+                },
+            })
+        );
+        assert_eq!(
+            lex.next_token(&mut table)?,
+            Some(TokenInfo {
+                token: Token::Terminal(9), // \r
+                position: Position {
+                    line: 1,
+                    position: 29
+                },
+            })
+        );
+        assert_eq!(
+            lex.next_token(&mut table)?,
+            Some(TokenInfo {
+                token: Token::Terminal(10), // \n
+                position: Position {
+                    line: 1,
+                    position: 30
+                },
+            })
+        );
+        assert_eq!(
+            lex.next_token(&mut table)?,
+            Some(TokenInfo {
+                token: Token::Terminal(11), // f
+                position: Position {
+                    line: 1,
+                    position: 31
                 },
             })
         );
         assert_eq!(lex.next_token(&mut table)?, None);
 
-        assert_eq!(table.len(), 5);
-        assert_eq!(table.terminal_value(0), "a");
-        assert_eq!(table.terminal_value(1), "b");
-        assert_eq!(table.terminal_value(2), r#""c""#);
-        assert_eq!(table.terminal_value(3), "'d'");
-        assert_eq!(table.terminal_value(4), "e\\\t\r\nf");
+        assert_eq!(table.len(), 12);
+        assert_eq!(table.terminal_value(0), 'a');
+        assert_eq!(table.terminal_value(1), 'b');
+        assert_eq!(table.terminal_value(2), '"');
+        assert_eq!(table.terminal_value(3), 'c');
+        assert_eq!(table.terminal_value(4), '\'');
+        assert_eq!(table.terminal_value(5), 'd');
+        assert_eq!(table.terminal_value(6), 'e');
+        assert_eq!(table.terminal_value(7), '\\');
+        assert_eq!(table.terminal_value(8), '\t');
+        assert_eq!(table.terminal_value(9), '\r');
+        assert_eq!(table.terminal_value(10), '\n');
+        assert_eq!(table.terminal_value(11), 'f');
 
         Ok(())
     }

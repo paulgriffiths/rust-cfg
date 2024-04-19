@@ -382,7 +382,7 @@ impl Grammar {
     }
 
     /// Returns the string value of a terminal
-    pub fn terminal_value(&self, id: usize) -> String {
+    pub fn terminal_value(&self, id: usize) -> char {
         self.symbol_table.terminal_value(id)
     }
 }
@@ -469,11 +469,19 @@ mod test {
         assert_eq!(g.first_ids(&[1]), first_char_set(&['f', 'c'], true)); // B
         assert_eq!(g.first_ids(&[2]), first_char_set(&['b'], false)); // D
         assert_eq!(g.first_ids(&[3]), first_char_set(&['s', 'e'], false)); // C
-        assert_eq!(g.first_ids(&[4]), first_char_set(&['f'], false)); // 'fish'
-        assert_eq!(g.first_ids(&[5]), first_char_set(&['c'], false)); // 'chips'
-        assert_eq!(g.first_ids(&[6]), first_char_set(&['s'], false)); // 'sausage'
-        assert_eq!(g.first_ids(&[7]), first_char_set(&['e'], false)); // 'egg'
-        assert_eq!(g.first_ids(&[8]), first_char_set(&['b'], false)); // 'bacon'
+        assert_eq!(g.first_ids(&[4]), first_char_set(&['f'], false));
+        assert_eq!(g.first_ids(&[5]), first_char_set(&['i'], false));
+        assert_eq!(g.first_ids(&[6]), first_char_set(&['s'], false));
+        assert_eq!(g.first_ids(&[7]), first_char_set(&['h'], false));
+        assert_eq!(g.first_ids(&[8]), first_char_set(&['c'], false));
+        assert_eq!(g.first_ids(&[9]), first_char_set(&['p'], false));
+        assert_eq!(g.first_ids(&[10]), first_char_set(&['a'], false));
+        assert_eq!(g.first_ids(&[11]), first_char_set(&['u'], false));
+        assert_eq!(g.first_ids(&[12]), first_char_set(&['g'], false));
+        assert_eq!(g.first_ids(&[13]), first_char_set(&['e'], false));
+        assert_eq!(g.first_ids(&[14]), first_char_set(&['b'], false));
+        assert_eq!(g.first_ids(&[15]), first_char_set(&['o'], false));
+        assert_eq!(g.first_ids(&[16]), first_char_set(&['n'], false));
         assert_eq!(
             g.first_ids(&[1, 3]),
             first_char_set(&['s', 'e', 'f', 'c'], false)

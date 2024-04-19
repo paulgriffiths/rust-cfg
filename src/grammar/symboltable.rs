@@ -3,14 +3,14 @@ use std::collections::HashMap;
 /// A reference entry in the symbol table
 #[derive(Debug, Clone)]
 enum Symbol {
-    Terminal(String),
+    Terminal(char),
     NonTerminal(String),
 }
 
 /// A symbol table to contain terminal and non-terminal grammar symbols
 pub struct SymbolTable {
     symbols: Vec<Symbol>,
-    terminals: HashMap<String, usize>,
+    terminals: HashMap<char, usize>,
     non_terminals: HashMap<String, usize>,
     terminal_ids: Vec<usize>,
     non_terminal_ids: Vec<usize>,
@@ -36,14 +36,14 @@ impl SymbolTable {
 
     /// Adds a terminal to the symbol table and returns its ID. If the terminal
     /// is already in the symbol table, its existing ID is returned.
-    pub fn add_terminal(&mut self, value: &str) -> usize {
-        if let Some(symbol) = self.terminals.get(value) {
+    pub fn add_terminal(&mut self, value: char) -> usize {
+        if let Some(symbol) = self.terminals.get(&value) {
             *symbol
         } else {
             let index = self.len();
-            self.terminals.insert(value.to_string(), index);
+            self.terminals.insert(value, index);
             self.terminal_ids.push(index);
-            self.symbols.push(Symbol::Terminal(value.to_string()));
+            self.symbols.push(Symbol::Terminal(value));
             index
         }
     }
@@ -112,11 +112,11 @@ impl SymbolTable {
         &self.terminal_ids
     }
 
-    /// Returns the string value of the terminal with the given ID. Panics if
+    /// Returns the char value of the terminal with the given ID. Panics if
     /// there is no terminal with the given ID in the symbol table.
-    pub fn terminal_value(&self, i: usize) -> String {
+    pub fn terminal_value(&self, i: usize) -> char {
         match &self.symbols[i] {
-            Symbol::Terminal(s) => s.clone(),
+            Symbol::Terminal(s) => *s,
             Symbol::NonTerminal(_) => {
                 panic!("symbol {} is a non-terminal", i);
             }
@@ -131,17 +131,17 @@ mod test {
     #[test]
     fn test_add() {
         let mut table: SymbolTable = Default::default();
-        assert_eq!(table.add_terminal("a"), 0);
-        assert_eq!(table.add_terminal("a"), 0);
+        assert_eq!(table.add_terminal('a'), 0);
+        assert_eq!(table.add_terminal('a'), 0);
         assert_eq!(table.add_non_terminal("b"), 1);
-        assert_eq!(table.add_terminal("a"), 0);
+        assert_eq!(table.add_terminal('a'), 0);
         assert_eq!(table.add_non_terminal("b"), 1);
-        assert_eq!(table.add_terminal("b"), 2);
+        assert_eq!(table.add_terminal('b'), 2);
         assert_eq!(table.add_non_terminal("b"), 1);
         assert_eq!(table.add_non_terminal("c"), 3);
-        assert_eq!(table.add_terminal("c"), 4);
-        assert_eq!(table.add_terminal("a"), 0);
-        assert_eq!(table.add_terminal("b"), 2);
+        assert_eq!(table.add_terminal('c'), 4);
+        assert_eq!(table.add_terminal('a'), 0);
+        assert_eq!(table.add_terminal('b'), 2);
     }
 
     #[test]
@@ -150,11 +150,11 @@ mod test {
         assert!(table.is_empty());
         assert_eq!(table.len(), 0);
 
-        assert_eq!(table.add_terminal("a"), 0);
+        assert_eq!(table.add_terminal('a'), 0);
         assert!(!table.is_empty());
         assert_eq!(table.len(), 1);
 
-        assert_eq!(table.add_terminal("b"), 1);
+        assert_eq!(table.add_terminal('b'), 1);
         assert_eq!(table.add_non_terminal("a"), 2);
         assert!(!table.is_empty());
         assert_eq!(table.len(), 3);
@@ -165,12 +165,12 @@ mod test {
         let mut table = SymbolTable::new();
         assert_eq!(table.add_non_terminal("a"), 0);
         assert_eq!(table.add_non_terminal("b"), 1);
-        assert_eq!(table.add_terminal("a"), 2);
+        assert_eq!(table.add_terminal('a'), 2);
         assert_eq!(table.add_non_terminal("c"), 3);
-        assert_eq!(table.add_terminal("b"), 4);
-        assert_eq!(table.add_terminal("c"), 5);
+        assert_eq!(table.add_terminal('b'), 4);
+        assert_eq!(table.add_terminal('c'), 5);
         assert_eq!(table.add_non_terminal("c"), 3);
-        assert_eq!(table.add_terminal("b"), 4);
+        assert_eq!(table.add_terminal('b'), 4);
 
         assert_eq!(table.non_terminal_ids(), &[0, 1, 3]);
         assert_eq!(table.terminal_ids(), &[2, 4, 5]);
@@ -181,7 +181,7 @@ mod test {
         let mut table = SymbolTable::new();
         assert_eq!(table.add_non_terminal("a"), 0);
         assert_eq!(table.add_non_terminal("b"), 1);
-        assert_eq!(table.add_terminal("a"), 2);
+        assert_eq!(table.add_terminal('a'), 2);
 
         assert_eq!(table.non_terminal_value(0), "a");
         assert_eq!(table.non_terminal_value(1), "b");
@@ -193,7 +193,7 @@ mod test {
         let mut table = SymbolTable::new();
         assert_eq!(table.add_non_terminal("a"), 0);
         assert_eq!(table.add_non_terminal("b"), 1);
-        assert_eq!(table.add_terminal("a"), 2);
+        assert_eq!(table.add_terminal('a'), 2);
 
         assert_eq!(table.non_terminal_value(2), "a");
     }
@@ -201,22 +201,22 @@ mod test {
     #[test]
     fn test_terminal_value() {
         let mut table = SymbolTable::new();
-        assert_eq!(table.add_terminal("a"), 0);
-        assert_eq!(table.add_terminal("b"), 1);
+        assert_eq!(table.add_terminal('a'), 0);
+        assert_eq!(table.add_terminal('b'), 1);
         assert_eq!(table.add_non_terminal("a"), 2);
 
-        assert_eq!(table.terminal_value(0), "a");
-        assert_eq!(table.terminal_value(1), "b");
+        assert_eq!(table.terminal_value(0), 'a');
+        assert_eq!(table.terminal_value(1), 'b');
     }
 
     #[test]
     #[should_panic]
     fn test_terminal_value_panics() {
         let mut table = SymbolTable::new();
-        assert_eq!(table.add_terminal("a"), 0);
-        assert_eq!(table.add_terminal("b"), 1);
+        assert_eq!(table.add_terminal('a'), 0);
+        assert_eq!(table.add_terminal('b'), 1);
         assert_eq!(table.add_non_terminal("a"), 2);
 
-        assert_eq!(table.terminal_value(2), "a");
+        assert_eq!(table.terminal_value(2), 'a');
     }
 }

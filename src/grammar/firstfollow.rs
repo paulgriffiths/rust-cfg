@@ -64,9 +64,7 @@ impl<'b> Builder<'b> {
         // Calculate FIRST for terminals separately, as these sets never change
         // and only need to be calculated once
         for i in self.symbol_table.terminal_ids().iter() {
-            self.firsts[*i].insert(FirstItem::Character(
-                self.symbol_table.terminal_value(*i).chars().next().unwrap(),
-            ));
+            self.firsts[*i].insert(FirstItem::Character(self.symbol_table.terminal_value(*i)));
         }
 
         // Then calculate FIRST for non-terminals. This is an iterative process
