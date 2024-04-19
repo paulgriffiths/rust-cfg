@@ -1,4 +1,7 @@
 use super::items::{Item, ItemSet};
+use super::parsetree::{Child, Node, Tree};
+use super::reader::Reader;
+use super::InputSymbol;
 use crate::errors::{Error, Result};
 use crate::grammar::{Grammar, Symbol};
 use std::collections::HashSet;
@@ -16,6 +19,28 @@ impl Parser {
         };
 
         Ok(parser)
+    }
+
+    /// Parses an input string
+    pub fn parse(&self, input: &str) -> Result<Tree> {
+        if input.is_empty() {
+            return Err(Error::EmptyInput);
+        }
+
+        let mut tree = Tree::new();
+        let mut reader = Reader::new(input);
+
+        // Actually parse the input
+
+        // Ensure we consumed all the input during the parse
+        if reader.lookahead() != InputSymbol::EndOfInput {
+            return Err(Error::ParseError(format!(
+                "trailing input after parse: {:?}",
+                reader.lookahead()
+            )));
+        }
+
+        Ok(tree)
     }
 }
 
@@ -92,7 +117,7 @@ fn goto(g: &Grammar, items: &ItemSet, s: Symbol) -> ItemSet {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::test::test_file_path;
+    use crate::test::{assert_error_text, test_file_path};
 
     #[test]
     fn test_new() -> std::result::Result<(), Box<dyn std::error::Error>> {
@@ -337,6 +362,15 @@ mod test {
             },
         ]);
         assert_eq!(goto(&g, &items, Symbol::NonTerminal(3)), want);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_parse_fail() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let g = Grammar::new_from_file(&test_file_path("grammars/adventure.cfg"))?;
+        let parser = Parser::new(&g)?;
+        assert_error_text(parser.parse(""), "empty input");
 
         Ok(())
     }
