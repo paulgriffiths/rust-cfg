@@ -155,20 +155,14 @@ impl<'p> Parser<'p> {
     /// child suitable for including in the parent node of the parse tree
     fn parse_terminal(&self, id: usize, reader: &mut Reader) -> Result<Child> {
         let value = self.grammar.terminal_value(id);
-        let mut read = String::with_capacity(value.len());
-
-        for c in value.chars() {
-            read.push(c);
-
-            if InputSymbol::Character(c) != reader.next() {
-                return Err(Error::ParseError(format!(
-                    "failed to match terminal: expected '{}', read '{}'",
-                    value, read,
-                )));
-            }
+        let read = reader.next();
+        match read {
+            InputSymbol::Character(c) if c == value => Ok(Child::Terminal(c)),
+            _ => Err(Error::ParseError(format!(
+                "failed to match terminal: expected '{}', got '{}'",
+                value, read,
+            ))),
         }
-
-        Ok(Child::Terminal(value))
     }
 }
 
@@ -240,15 +234,15 @@ mod test {
         );
         assert_error_text(
             parser.parse("GO$"),
-            "parse error: failed to get production for non-terminal ws(6) for input symbol Character('$')",
+            "parse error: failed to get production for non-terminal ws(9) for input symbol Character('$')",
         );
         assert_error_text(
             parser.parse("GO"),
-            "parse error: failed to get production for non-terminal ws(6) for input symbol EndOfInput",
+            "parse error: failed to get production for non-terminal ws(9) for input symbol EndOfInput",
         );
         assert_error_text(
             parser.parse("TAKE GOGGLES"),
-            "parse error: failed to match terminal: expected 'GOLD', read 'GOL'",
+            "parse error: failed to match terminal: expected 'L', got 'G'",
         );
         assert_error_text(
             parser.parse("GO WEST TRAILING"),
