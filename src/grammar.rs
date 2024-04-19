@@ -86,7 +86,7 @@ impl Grammar {
 
     /// Returns an augmented grammar, with a new start symbol Saug and a new
     /// production Saug → S, where S is the previous start symbol
-    fn augment(&self) -> Grammar {
+    pub fn augment(&self) -> Grammar {
         let mut symbol_table = self.symbol_table.deep_copy();
         let mut productions = self.productions.clone();
         let mut nt_productions = self.nt_productions.clone();

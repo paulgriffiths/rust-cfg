@@ -4,14 +4,16 @@ use crate::grammar::{Grammar, Symbol};
 use std::collections::HashSet;
 
 /// A simple LR parser
-pub struct Parser<'p> {
-    grammar: &'p Grammar,
+pub struct Parser {
+    grammar: Grammar,
 }
 
-impl<'p> Parser<'p> {
+impl Parser {
     /// Creates a new simple LR parser
-    pub fn new(grammar: &Grammar) -> Result<Parser<'_>> {
-        let parser = Parser { grammar };
+    pub fn new(grammar: &Grammar) -> Result<Parser> {
+        let parser = Parser {
+            grammar: grammar.augment(),
+        };
 
         Ok(parser)
     }
