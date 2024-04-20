@@ -1,3 +1,4 @@
+use crate::grammar::FollowItem;
 use std::fmt;
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -16,6 +17,8 @@ pub enum Error {
     GrammarNotLL1,
     NonTerminalNoProductions(String),
     ParseError(String),
+    ReduceReduceConflict(usize, FollowItem),
+    ShiftReduceConflict(usize),
     TrailingInput,
     UnexpectedChar(char),
     UnrecognizedEscapeChar(char),
@@ -41,6 +44,15 @@ impl fmt::Display for Error {
                 write!(f, "no productions found for non-terminal '{}'", s)
             }
             Error::ParseError(s) => write!(f, "parse error: {}", s),
+            // TODO: Implement Display trait for FollowItem
+            Error::ReduceReduceConflict(s, c) => write!(
+                f,
+                "parse error: reduce-reduce conflict for state {} input '{:?}'",
+                s, c
+            ),
+            Error::ShiftReduceConflict(s) => {
+                write!(f, "parse error: shift-reduce conflict for state {}", s)
+            }
             Error::TrailingInput => write!(f, "trailing input"),
             Error::UnexpectedChar(c) => write!(f, "unexpected input character '{}'", c),
             Error::UnrecognizedEscapeChar(c) => {

@@ -69,6 +69,11 @@ impl SymbolTable {
         self.non_terminals.contains_key(name)
     }
 
+    /// Returns true if the symbol table contains the given terminal
+    pub fn contains_terminal(&self, t: char) -> bool {
+        self.terminals.contains_key(&t)
+    }
+
     /// Returns a deep copy of the symbol table
     pub fn deep_copy(&self) -> SymbolTable {
         SymbolTable {
@@ -115,6 +120,10 @@ impl SymbolTable {
     /// Returns a sorted slice of the IDs of all terminals
     pub fn terminal_ids(&self) -> &[usize] {
         &self.terminal_ids
+    }
+
+    pub fn terminal_index(&self, c: char) -> usize {
+        *self.terminals.get(&c).unwrap()
     }
 
     /// Returns the char value of the terminal with the given ID. Panics if

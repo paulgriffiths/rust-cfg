@@ -1,4 +1,4 @@
-use crate::grammar::{Grammar, Symbol};
+use crate::grammar::Grammar;
 use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
 
@@ -8,7 +8,7 @@ pub type ItemSet = std::collections::HashSet<Item>;
 /// An LR parse item
 pub struct Item {
     pub dot: usize,
-    pub production: Option<usize>,
+    pub production: usize,
 }
 
 impl Ord for Item {
@@ -28,15 +28,15 @@ impl Item {
     pub fn new_production(p: usize) -> Item {
         Item {
             dot: 0,
-            production: Some(p),
+            production: p,
         }
     }
 
     /// Returns a new item for ϵ
-    pub fn new_e() -> Item {
+    pub fn new_e(p: usize) -> Item {
         Item {
-            dot: 0,
-            production: None,
+            dot: 1,
+            production: p,
         }
     }
 
@@ -50,10 +50,7 @@ impl Item {
 
     /// Returns true if the dot is at the right end
     pub fn is_end(&self, g: &Grammar) -> bool {
-        match self.production {
-            Some(p) => self.dot == g.production(p).body.len(),
-            None => true,
-        }
+        self.dot == g.production(self.production).body.len()
     }
 }
 

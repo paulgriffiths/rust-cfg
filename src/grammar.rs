@@ -365,6 +365,16 @@ impl Grammar {
         true
     }
 
+    /// Returns the index of a terminal, or None if the terminal is not
+    /// recognized
+    pub fn maybe_terminal_index(&self, c: char) -> Option<usize> {
+        if self.symbol_table.contains_terminal(c) {
+            Some(self.symbol_table.terminal_index(c))
+        } else {
+            None
+        }
+    }
+
     /// Returns a sorted slice of the IDs of all non-terminals
     pub fn non_terminal_ids(&self) -> &[usize] {
         self.symbol_table.non_terminal_ids()
@@ -404,6 +414,12 @@ impl Grammar {
     /// Returns a sorted slice of the IDs of all terminals
     pub fn terminal_ids(&self) -> &[usize] {
         self.symbol_table.terminal_ids()
+    }
+
+    /// Returns the index of a terminal, and panics if the terminal is not
+    /// recognized
+    pub fn terminal_index(&self, c: char) -> usize {
+        self.symbol_table.terminal_index(c)
     }
 
     /// Returns the string value of a terminal
