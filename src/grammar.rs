@@ -57,6 +57,7 @@ pub struct Grammar {
     firsts: FirstVector,
     follows: FollowMap,
     start: usize,
+    symbols: Vec<Symbol>,
 }
 
 impl Grammar {
@@ -68,6 +69,14 @@ impl Grammar {
         let firsts = builder.firsts;
         let follows = builder.follows;
 
+        let mut symbols: Vec<Symbol> = Vec::with_capacity(output.symbol_table.len());
+        for (i, s) in output.symbol_table.symbols().iter().enumerate() {
+            symbols.push(match s {
+                symboltable::Symbol::Terminal(_) => Symbol::Terminal(i),
+                symboltable::Symbol::NonTerminal(_) => Symbol::NonTerminal(i),
+            })
+        }
+
         Ok(Grammar {
             symbol_table: output.symbol_table,
             productions: output.productions,
@@ -75,6 +84,7 @@ impl Grammar {
             start: output.start,
             firsts,
             follows,
+            symbols,
         })
     }
 
@@ -112,6 +122,14 @@ impl Grammar {
         let firsts = builder.firsts;
         let follows = builder.follows;
 
+        let mut symbols: Vec<Symbol> = Vec::with_capacity(symbol_table.len());
+        for (i, s) in symbol_table.symbols().iter().enumerate() {
+            symbols.push(match s {
+                symboltable::Symbol::Terminal(_) => Symbol::Terminal(i),
+                symboltable::Symbol::NonTerminal(_) => Symbol::NonTerminal(i),
+            })
+        }
+
         Grammar {
             symbol_table,
             productions,
@@ -119,6 +137,7 @@ impl Grammar {
             start: id,
             firsts,
             follows,
+            symbols,
         }
     }
 
@@ -374,6 +393,12 @@ impl Grammar {
     /// Returns the ID of the start symbol
     pub fn start(&self) -> usize {
         self.start
+    }
+
+    /// Returns a slice of all the terminal and non-terminal symbols in the
+    /// grammar
+    pub fn symbols(&self) -> &[Symbol] {
+        &self.symbols
     }
 
     /// Returns a sorted slice of the IDs of all terminals

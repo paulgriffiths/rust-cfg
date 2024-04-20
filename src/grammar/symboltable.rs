@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 /// A reference entry in the symbol table
 #[derive(Debug, Clone)]
-enum Symbol {
+pub enum Symbol {
     Terminal(char),
     NonTerminal(String),
 }
@@ -105,6 +105,11 @@ impl SymbolTable {
                 panic!("symbol {} is a terminal", i);
             }
         }
+    }
+
+    /// Returns a slice containing all the symbols in the symbol table
+    pub fn symbols(&self) -> &[Symbol] {
+        &self.symbols
     }
 
     /// Returns a sorted slice of the IDs of all terminals

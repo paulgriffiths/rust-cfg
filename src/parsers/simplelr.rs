@@ -1,4 +1,4 @@
-use super::items::{Item, ItemSet};
+use super::items::{Item, ItemSet, ItemStateSet};
 use super::parsetree::{Child, Node, Tree};
 use super::reader::Reader;
 use super::InputSymbol;
@@ -9,6 +9,27 @@ use std::collections::HashSet;
 /// A simple LR parser
 pub struct Parser {
     grammar: Grammar,
+}
+
+enum TableEntry {
+    Shift(usize),
+    Reduce(usize),
+    Accept,
+    Error,
+}
+
+struct ParseTable {
+    entries: Vec<Vec<TableEntry>>,
+    num_states: usize,
+}
+
+impl ParseTable {
+    fn new(grammar: &Grammar) -> ParseTable {
+        ParseTable {
+            entries: Vec::new(),
+            num_states: 0,
+        }
+    }
 }
 
 impl Parser {
@@ -42,6 +63,52 @@ impl Parser {
 
         Ok(tree)
     }
+}
+
+/// Returns the canonical collection of sets of LR(0) items for the given
+/// augmented grammar
+fn canonical_collection(g: &Grammar) -> Vec<ItemSet> {
+    // Algorithm adapted from Aho et al (2007) p.246
+
+    let start_set = ItemSet::from([Item::new_production(
+        g.productions_for_non_terminal(g.start())[0],
+    )]);
+    let mut seen: HashSet<ItemStateSet> = HashSet::from([ItemStateSet(start_set.clone())]);
+
+    // Initialize collection with CLOSURE(Saug → ·S)
+    let mut collection: Vec<ItemSet> = vec![closure(g, &start_set)];
+
+    let mut count = collection.len();
+    loop {
+        // Iterate through all the sets currently in the collection
+        for i in 0..count {
+            // For each grammar symbol X, if GOTO(i, X) is not empty and not
+            // already in the collection, add it to the collection
+            for symbol in g.symbols() {
+                let set = goto(g, &collection[i], *symbol);
+                if set.is_empty() {
+                    continue;
+                }
+
+                let state_set = ItemStateSet(set.clone());
+                if seen.contains(&state_set) {
+                    continue;
+                }
+
+                collection.push(set);
+                seen.insert(state_set);
+            }
+        }
+
+        // Continue until no new sets are added to the collection on a round
+        let new_count = collection.len();
+        if new_count == count {
+            break;
+        }
+        count = new_count;
+    }
+
+    collection
 }
 
 /// Returns CLOSURE(items)
@@ -128,15 +195,17 @@ mod test {
     }
 
     #[test]
-    fn test_closure() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    fn test_canonical_collection() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        // Grammar and test cases taken from Aho et al (2007) p.244
+
         let g = Grammar::new_from_file(&test_file_path("grammars/simplelr/expr.cfg"))?;
 
-        // Grammar and test cases taken from Aho et al (2007) p.244
+        let c = canonical_collection(&g);
+        assert_eq!(c.len(), 12);
 
         // I0
         let items = ItemSet::from([Item::new_production(0)]);
-        let c = closure(&g, &items);
-        assert_closure(&c, &items, &[1, 2, 3, 4, 5, 6]);
+        assert_closure(&c[0], &items, &[1, 2, 3, 4, 5, 6]);
 
         // I1
         let items = ItemSet::from([
@@ -149,8 +218,7 @@ mod test {
                 production: Some(1),
             },
         ]);
-        let c = closure(&g, &items);
-        assert_closure(&c, &items, &[]);
+        assert_closure(&c[1], &items, &[]);
 
         // I2
         let items = ItemSet::from([
@@ -163,48 +231,42 @@ mod test {
                 production: Some(3),
             },
         ]);
-        let c = closure(&g, &items);
-        assert_closure(&c, &items, &[]);
+        assert_closure(&c[2], &items, &[]);
 
         // I3
         let items = ItemSet::from([Item {
             dot: 1,
             production: Some(4),
         }]);
-        let c = closure(&g, &items);
-        assert_closure(&c, &items, &[]);
+        assert_closure(&c[3], &items, &[]);
 
         // I4
         let items = ItemSet::from([Item {
             dot: 1,
             production: Some(5),
         }]);
-        let c = closure(&g, &items);
-        assert_closure(&c, &items, &[1, 2, 3, 4, 5, 6]);
+        assert_closure(&c[4], &items, &[1, 2, 3, 4, 5, 6]);
 
         // I5
         let items = ItemSet::from([Item {
             dot: 1,
             production: Some(6),
         }]);
-        let c = closure(&g, &items);
-        assert_closure(&c, &items, &[]);
+        assert_closure(&c[5], &items, &[]);
 
         // I6
         let items = ItemSet::from([Item {
             dot: 2,
             production: Some(1),
         }]);
-        let c = closure(&g, &items);
-        assert_closure(&c, &items, &[3, 4, 5, 6]);
+        assert_closure(&c[6], &items, &[3, 4, 5, 6]);
 
         // I7
         let items = ItemSet::from([Item {
             dot: 2,
             production: Some(3),
         }]);
-        let c = closure(&g, &items);
-        assert_closure(&c, &items, &[5, 6]);
+        assert_closure(&c[7], &items, &[5, 6]);
 
         // I8
         let items = ItemSet::from([
@@ -217,8 +279,7 @@ mod test {
                 production: Some(5),
             },
         ]);
-        let c = closure(&g, &items);
-        assert_closure(&c, &items, &[]);
+        assert_closure(&c[8], &items, &[]);
 
         // I9
         let items = ItemSet::from([
@@ -231,137 +292,21 @@ mod test {
                 production: Some(3),
             },
         ]);
-        let c = closure(&g, &items);
-        assert_closure(&c, &items, &[]);
+        assert_closure(&c[9], &items, &[]);
 
         // I10
         let items = ItemSet::from([Item {
             dot: 3,
             production: Some(3),
         }]);
-        let c = closure(&g, &items);
-        assert_closure(&c, &items, &[]);
+        assert_closure(&c[10], &items, &[]);
 
         // I11
         let items = ItemSet::from([Item {
             dot: 3,
             production: Some(5),
         }]);
-        let c = closure(&g, &items);
-        assert_closure(&c, &items, &[]);
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_goto() -> std::result::Result<(), Box<dyn std::error::Error>> {
-        let g = Grammar::new_from_file(&test_file_path("grammars/simplelr/expr.cfg"))?;
-
-        // Grammar and test cases taken from Aho et al (2007) p.244
-
-        // I0 → E
-        let items = closure(&g, &ItemSet::from([Item::new_production(0)]));
-        let want = ItemSet::from([
-            Item {
-                dot: 1,
-                production: Some(0),
-            },
-            Item {
-                dot: 1,
-                production: Some(1),
-            },
-        ]);
-        assert_eq!(goto(&g, &items, Symbol::NonTerminal(1)), want);
-
-        // I0 → T
-        let items = closure(&g, &ItemSet::from([Item::new_production(0)]));
-        let want = ItemSet::from([
-            Item {
-                dot: 1,
-                production: Some(2),
-            },
-            Item {
-                dot: 1,
-                production: Some(3),
-            },
-        ]);
-        assert_eq!(goto(&g, &items, Symbol::NonTerminal(3)), want);
-
-        // I0 → 'a'
-        let items = closure(&g, &ItemSet::from([Item::new_production(0)]));
-        let want = ItemSet::from([Item {
-            dot: 1,
-            production: Some(6),
-        }]);
-        assert_eq!(goto(&g, &items, Symbol::Terminal(8)), want);
-
-        // I0 → '('
-        let items = closure(&g, &ItemSet::from([Item::new_production(0)]));
-        let want = ItemSet::from([
-            Item {
-                dot: 1,
-                production: Some(5),
-            },
-            Item {
-                dot: 0,
-                production: Some(1),
-            },
-            Item {
-                dot: 0,
-                production: Some(2),
-            },
-            Item {
-                dot: 0,
-                production: Some(3),
-            },
-            Item {
-                dot: 0,
-                production: Some(4),
-            },
-            Item {
-                dot: 0,
-                production: Some(5),
-            },
-            Item {
-                dot: 0,
-                production: Some(6),
-            },
-        ]);
-        assert_eq!(goto(&g, &items, Symbol::Terminal(6)), want);
-
-        // I0 → F
-        let items = closure(&g, &ItemSet::from([Item::new_production(0)]));
-        let want = ItemSet::from([Item {
-            dot: 1,
-            production: Some(4),
-        }]);
-        assert_eq!(goto(&g, &items, Symbol::NonTerminal(5)), want);
-
-        // I6 → T
-        let items = closure(
-            &g,
-            &ItemSet::from([
-                Item {
-                    dot: 2,
-                    production: Some(1),
-                },
-                Item::new_production(3),
-                Item::new_production(4),
-                Item::new_production(5),
-                Item::new_production(6),
-            ]),
-        );
-        let want = ItemSet::from([
-            Item {
-                dot: 3,
-                production: Some(1),
-            },
-            Item {
-                dot: 1,
-                production: Some(3),
-            },
-        ]);
-        assert_eq!(goto(&g, &items, Symbol::NonTerminal(3)), want);
+        assert_closure(&c[11], &items, &[]);
 
         Ok(())
     }
@@ -375,12 +320,9 @@ mod test {
         Ok(())
     }
 
-    fn assert_closure(got: &ItemSet, items: &ItemSet, kernels: &[usize]) {
-        let mut cmp = ItemSet::new();
-        for item in items {
-            cmp.insert(*item);
-        }
-        for p in kernels {
+    fn assert_closure(got: &ItemSet, kernels: &ItemSet, non_kernels: &[usize]) {
+        let mut cmp = kernels.clone();
+        for p in non_kernels {
             cmp.insert(Item::new_production(*p));
         }
         assert_eq!(got, &cmp);
