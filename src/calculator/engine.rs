@@ -1,5 +1,5 @@
 use super::value::Value;
-use crate::errors::Result;
+use crate::errors::{Error, Result};
 use crate::grammar::Grammar;
 use crate::parsers::parsetree::{Child, Node, Tree};
 use crate::parsers::simplelr::Parser;
@@ -24,18 +24,25 @@ nzdigit → '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9'
 digit   → '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9'
 ";
 
-/// Evaluates expressions to demonstrate the parse generators
+/// Evaluates expressions to demonstrate using the parse tree returned by a
+/// parser generator to perform actual work
 pub struct Engine {
     parser: Parser,
 }
 
+impl Default for Engine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Engine {
     /// Returns a new expression evaluation engine
-    pub fn new() -> Result<Engine> {
-        let grammar = Grammar::new(GRAMMAR_TEXT)?;
-        let parser = Parser::new(&grammar)?;
+    pub fn new() -> Engine {
+        let grammar = Grammar::new(GRAMMAR_TEXT).expect("bad grammar");
+        let parser = Parser::new(&grammar).expect("bad grammar");
 
-        Ok(Engine { parser })
+        Engine { parser }
     }
 
     /// Evaluates an expression
@@ -66,6 +73,8 @@ impl Engine {
 
     /// Recursively evaluates a parse tree node
     fn evaluate_node(&self, tree: &Tree, node: &Node) -> Result<Value> {
+        // Evaluate a node based on the grammar production from which it
+        // was generated
         match node.production {
             0 => {
                 // E → E '+' T
@@ -89,7 +98,12 @@ impl Engine {
             4 => {
                 // T →  T '/' X
                 let (left, right) = self.binary_children(tree, node);
-                Ok(self.evaluate_node(tree, left)? / self.evaluate_node(tree, right)?)
+                let divisor = self.evaluate_node(tree, right)?;
+                if divisor.is_zero() {
+                    return Err(Error::DivideByZero);
+                }
+
+                Ok(self.evaluate_node(tree, left)? / divisor)
             }
             5 => {
                 // T → X
@@ -123,6 +137,8 @@ impl Engine {
                 let Child::NonTerminal(nt) = node.children[0] else {
                     panic!("no non-terminal child");
                 };
+                // Call tree.frontier_node to coalesce the entire sub-tree
+                // into a single string for conversion
                 Value::new_integer(&tree.frontier_node(nt))
             }
             12 => {
@@ -130,10 +146,14 @@ impl Engine {
                 let Child::NonTerminal(nt) = node.children[0] else {
                     panic!("no non-terminal child");
                 };
+                // Call tree.frontier_node to coalesce the entire sub-tree
+                // into a single string for conversion
                 Value::new_real(&tree.frontier_node(nt))
             }
             _ => {
-                panic!("bad node!");
+                // We don't directly process any productions at a lower level
+                // than 'number' so we shouldn't get here
+                panic!("unexpected production {}", node.production);
             }
         }
     }
@@ -145,8 +165,10 @@ mod test {
 
     #[test]
     fn test_parse() -> Result<()> {
-        let engine = Engine::new()?;
+        let engine = Engine::new();
+
         assert_eq!(engine.evaluate("12+34")?, Value::new_integer("46")?);
+        assert_eq!(engine.evaluate("12+34.")?, Value::new_real("46")?);
         assert_eq!(engine.evaluate("6.5+99")?, Value::new_real("105.5")?);
         assert_eq!(engine.evaluate("-12+-34")?, Value::new_integer("-46")?);
         assert_eq!(engine.evaluate("-82+-42.5")?, Value::new_real("-124.5")?);
@@ -168,5 +190,22 @@ mod test {
         assert_eq!(engine.evaluate("25^0.5")?, Value::new_real("5")?);
 
         Ok(())
+    }
+
+    #[test]
+    fn test_parse_fail() {
+        let engine: Engine = Default::default();
+
+        assert_eq!(engine.evaluate("3/0"), Err(Error::DivideByZero));
+        assert_eq!(
+            engine.evaluate("3/b"),
+            Err(Error::ParseError(String::from(
+                "unrecognized input character 'b'"
+            )))
+        );
+        assert_eq!(
+            engine.evaluate("3*/4"),
+            Err(Error::ParseError(String::from("no parser action")))
+        );
     }
 }

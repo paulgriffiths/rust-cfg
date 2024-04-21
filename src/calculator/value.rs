@@ -1,9 +1,12 @@
 use crate::errors::{Error, Result};
 use rug::ops::Pow;
-use rug::Integer;
+use rug::{Complete, Integer};
 use std::fmt;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
+/// A typed integral or real numeric value. Integral values use arbitrary
+/// precision arithmetic. Operations on Values will automatically promote
+/// integers to reals when appropriate.
 pub enum Value {
     Integer(Integer),
     Real(f64),
@@ -55,6 +58,7 @@ impl PartialEq for Value {
     }
 }
 
+/// Implements '+' operator
 impl Add for Value {
     type Output = Self;
 
@@ -72,6 +76,7 @@ impl Add for Value {
     }
 }
 
+/// Implements binary '-' operator
 impl Sub for Value {
     type Output = Self;
 
@@ -89,6 +94,7 @@ impl Sub for Value {
     }
 }
 
+/// Implements '*' operator
 impl Mul for Value {
     type Output = Self;
 
@@ -106,13 +112,23 @@ impl Mul for Value {
     }
 }
 
+/// Implements '/' operator
 impl Div for Value {
     type Output = Self;
 
     fn div(self, other: Self) -> Self {
         match self {
             Value::Integer(first) => match other {
-                Value::Integer(second) => Value::Integer(first / second),
+                Value::Integer(second) => {
+                    // If integer division can be done without a remainer,
+                    // return an integer. Otherwise, return a real.
+                    let (quotient, remainder) = first.div_rem_ref(&second).complete();
+                    if remainder.is_zero() {
+                        Value::Integer(quotient)
+                    } else {
+                        Value::Real(first.to_f64() / second.to_f64())
+                    }
+                }
                 Value::Real(second) => Value::Real(first.to_f64() / second),
             },
             Value::Real(first) => match other {
@@ -123,6 +139,7 @@ impl Div for Value {
     }
 }
 
+/// Implements unary '-' operator
 impl Neg for Value {
     type Output = Self;
 
@@ -151,15 +168,39 @@ impl Value {
         }
     }
 
+    /// Returns true if a value is negative
+    pub fn is_negative(&self) -> bool {
+        match self {
+            Value::Integer(n) => n.is_negative(),
+            Value::Real(r) => *r < 0.0,
+        }
+    }
+
+    /// Returns true if a value is zero
+    pub fn is_zero(&self) -> bool {
+        match self {
+            Value::Integer(n) => n.is_zero(),
+            Value::Real(r) => *r == 0.0,
+        }
+    }
+
     /// Performs exponentiation on a value
     pub fn pow(self, exp: Value) -> Self {
         match self {
             Value::Integer(base) => match exp {
                 Value::Integer(exp) => {
-                    let Some(e) = exp.to_u32() else {
-                        panic!("exponent out of range");
-                    };
-                    Value::Integer(base.pow(e))
+                    // Perform exponentiation with integers if possible, as
+                    // that allows us to get arbitrary length integers, but
+                    // the result will be a real number if the exponent is
+                    // negative, to promote to reals in that case
+                    if exp.is_negative() {
+                        Value::Real(base.to_f64().powf(exp.to_f64()))
+                    } else {
+                        let Some(e) = exp.to_u32() else {
+                            panic!("exponent out of range");
+                        };
+                        Value::Integer(base.pow(e))
+                    }
                 }
                 Value::Real(exp) => Value::Real(base.to_f64().powf(exp)),
             },
@@ -176,98 +217,204 @@ mod test {
     use super::*;
 
     #[test]
+    fn test_clone() -> Result<()> {
+        assert_eq!(Value::new_integer("3")?, Value::new_integer("3")?.clone());
+        assert_eq!(Value::new_real("42.5")?, Value::new_real("42.5")?.clone());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_debug() -> Result<()> {
+        assert_eq!(format!("{:?}", Value::new_integer("12")?), "(Integer) 12");
+        assert_eq!(format!("{:?}", Value::new_real("42.5")?), "(Real) 42.5");
+
+        Ok(())
+    }
+
+    #[test]
     fn test_display() -> Result<()> {
         assert_eq!(format!("{}", Value::new_integer("12")?), "12");
+        assert_eq!(format!("{}", Value::new_integer("-12")?), "-12");
+        assert_eq!(format!("{}", Value::new_integer("0")?), "0");
         assert_eq!(format!("{}", Value::new_real("42.5")?), "42.5");
+        assert_eq!(format!("{}", Value::new_real("-42.5")?), "-42.5");
+        assert_eq!(format!("{}", Value::new_real("0")?), "0");
+        assert_eq!(format!("{}", Value::new_real("-0")?), "-0");
 
         Ok(())
     }
 
     #[test]
     fn test_eq() -> Result<()> {
-        let cases = &[
-            Value::new_integer("12")?,
-            Value::new_integer("12")?,
-            Value::new_integer("42")?,
-            Value::new_real("12.0")?,
-            Value::new_real("12.0")?,
-            Value::new_real("42.0")?,
-        ];
-        assert_eq!(cases[0], cases[1]);
-        assert_ne!(cases[0], cases[2]);
-        assert_eq!(cases[0], cases[3]);
-        assert_ne!(cases[0], cases[5]);
-        assert_eq!(cases[3], cases[4]);
-        assert_ne!(cases[3], cases[5]);
-        assert_eq!(cases[3], cases[0]);
-        assert_ne!(cases[3], cases[2]);
+        assert_eq!(Value::new_integer("3")?, Value::new_integer("3")?);
+        assert_ne!(Value::new_integer("3")?, Value::new_integer("4")?);
+        assert_eq!(Value::new_integer("3")?, Value::new_real("3")?);
+        assert_ne!(Value::new_integer("3")?, Value::new_real("4")?);
+        assert_eq!(Value::new_real("3")?, Value::new_integer("3")?);
+        assert_ne!(Value::new_real("3")?, Value::new_integer("4")?);
+        assert_eq!(Value::new_real("3")?, Value::new_real("3")?);
+        assert_ne!(Value::new_real("3")?, Value::new_real("4")?);
 
         Ok(())
     }
 
     #[test]
-    fn test_ops() -> Result<()> {
-        let cases = &[
-            Value::new_integer("12")?,
-            Value::new_integer("3")?,
-            Value::new_real("25.0")?,
-            Value::new_real("2.0")?,
-            Value::new_integer("10")?,
-        ];
-
+    fn test_add() -> Result<()> {
         assert_eq!(
-            cases[0].clone() + cases[1].clone(),
-            Value::new_integer("15")?
+            Value::new_integer("3")? + Value::new_integer("7")?,
+            Value::new_integer("10")?
         );
         assert_eq!(
-            cases[0].clone() - cases[1].clone(),
-            Value::new_integer("9")?
+            Value::new_integer("-3")? + Value::new_real("7")?,
+            Value::new_real("4")?
         );
         assert_eq!(
-            cases[0].clone() * cases[1].clone(),
-            Value::new_integer("36")?
+            Value::new_real("3")? + Value::new_integer("-7")?,
+            Value::new_real("-4")?
         );
         assert_eq!(
-            cases[0].clone() / cases[1].clone(),
-            Value::new_integer("4")?
-        );
-        assert_eq!(-cases[0].clone(), Value::new_integer("-12")?);
-        assert_eq!(
-            cases[0].clone().pow(cases[1].clone()),
-            Value::new_integer("1728")?
-        );
-
-        assert_eq!(cases[2].clone() + cases[3].clone(), Value::new_real("27")?);
-        assert_eq!(cases[2].clone() - cases[3].clone(), Value::new_real("23")?);
-        assert_eq!(cases[2].clone() * cases[3].clone(), Value::new_real("50")?);
-        assert_eq!(
-            cases[2].clone() / cases[3].clone(),
-            Value::new_real("12.5")?
-        );
-        assert_eq!(-cases[2].clone(), Value::new_real("-25")?);
-        assert_eq!(
-            cases[2].clone().pow(cases[3].clone()),
-            Value::new_real("625")?
-        );
-
-        assert_eq!(cases[0].clone() + cases[2].clone(), Value::new_real("37")?);
-        assert_eq!(cases[0].clone() - cases[2].clone(), Value::new_real("-13")?);
-        assert_eq!(cases[0].clone() * cases[2].clone(), Value::new_real("300")?);
-        assert_eq!(cases[0].clone() / cases[3].clone(), Value::new_real("6")?);
-        assert_eq!(
-            cases[0].clone().pow(cases[3].clone()),
-            Value::new_real("144")?
-        );
-
-        assert_eq!(cases[2].clone() + cases[1].clone(), Value::new_real("28")?);
-        assert_eq!(cases[2].clone() - cases[1].clone(), Value::new_real("22")?);
-        assert_eq!(cases[2].clone() * cases[1].clone(), Value::new_real("75")?);
-        assert_eq!(cases[2].clone() / cases[4].clone(), Value::new_real("2.5")?);
-        assert_eq!(
-            cases[2].clone().pow(cases[1].clone()),
-            Value::new_real("15625")?
+            Value::new_real("-3")? + Value::new_real("-7")?,
+            Value::new_real("-10")?
         );
 
         Ok(())
+    }
+
+    #[test]
+    fn test_sub() -> Result<()> {
+        assert_eq!(
+            Value::new_integer("3")? - Value::new_integer("7")?,
+            Value::new_integer("-4")?
+        );
+        assert_eq!(
+            Value::new_integer("-3")? - Value::new_real("7")?,
+            Value::new_real("-10")?
+        );
+        assert_eq!(
+            Value::new_real("3")? - Value::new_integer("-7")?,
+            Value::new_real("10")?
+        );
+        assert_eq!(
+            Value::new_real("-3")? - Value::new_real("-7")?,
+            Value::new_real("4")?
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_mul() -> Result<()> {
+        assert_eq!(
+            Value::new_integer("3")? * Value::new_integer("7")?,
+            Value::new_integer("21")?
+        );
+        assert_eq!(
+            Value::new_integer("-3")? * Value::new_real("7")?,
+            Value::new_real("-21")?
+        );
+        assert_eq!(
+            Value::new_real("3")? * Value::new_integer("-7")?,
+            Value::new_real("-21")?
+        );
+        assert_eq!(
+            Value::new_real("-3")? * Value::new_real("-7")?,
+            Value::new_real("21")?
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_div() -> Result<()> {
+        assert_eq!(
+            Value::new_integer("12")? / Value::new_integer("4")?,
+            Value::new_integer("3")?
+        );
+        assert_eq!(
+            Value::new_integer("12")? / Value::new_integer("24")?,
+            Value::new_real("0.5")?
+        );
+        assert_eq!(
+            Value::new_integer("-2")? / Value::new_real("8")?,
+            Value::new_real("-0.25")?
+        );
+        assert_eq!(
+            Value::new_real("2")? / Value::new_integer("-8")?,
+            Value::new_real("-0.25")?
+        );
+        assert_eq!(
+            Value::new_real("-2")? / Value::new_real("-8")?,
+            Value::new_real("0.25")?
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_pow() -> Result<()> {
+        assert_eq!(
+            Value::new_integer("12")?.pow(Value::new_integer("4")?),
+            Value::new_integer("20736")?
+        );
+        assert_eq!(
+            Value::new_integer("10")?.pow(Value::new_integer("-2")?),
+            Value::new_real("0.01")?
+        );
+        assert_eq!(
+            Value::new_integer("3")?.pow(Value::new_real("4")?),
+            Value::new_real("81")?
+        );
+        assert_eq!(
+            Value::new_real("3")?.pow(Value::new_integer("4")?),
+            Value::new_real("81")?
+        );
+        assert_eq!(
+            Value::new_real("3")?.pow(Value::new_real("4")?),
+            Value::new_real("81")?
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_neg() -> Result<()> {
+        assert_eq!(-Value::new_integer("42")?, Value::new_integer("-42")?);
+        assert_eq!(-Value::new_real("23.5")?, Value::new_real("-23.5")?);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_is_negative() -> Result<()> {
+        assert!(Value::new_integer("-42")?.is_negative());
+        assert!(!Value::new_integer("42")?.is_negative());
+        assert!(Value::new_real("-0.5")?.is_negative());
+        assert!(!Value::new_real("0.5")?.is_negative());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_is_zero() -> Result<()> {
+        assert!(Value::new_integer("0")?.is_zero());
+        assert!(!Value::new_integer("42")?.is_zero());
+        assert!(Value::new_real("0.0")?.is_zero());
+        assert!(Value::new_real("-0.0")?.is_zero());
+        assert!(!Value::new_real("42.5")?.is_zero());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_invalid_values() {
+        assert_eq!(
+            Value::new_integer("oops"),
+            Err(Error::InvalidInteger(String::from("oops")))
+        );
+        assert_eq!(
+            Value::new_real("eek"),
+            Err(Error::InvalidReal(String::from("eek")))
+        );
     }
 }
