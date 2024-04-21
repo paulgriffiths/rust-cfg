@@ -15,6 +15,8 @@ pub enum Error {
     ExpectedProductionSymbol,
     GrammarLeftRecursive,
     GrammarNotLL1,
+    InvalidInteger(String),
+    InvalidReal(String),
     NonTerminalNoProductions(String),
     ParseError(String),
     ReduceReduceConflict(usize, FollowItem),
@@ -40,6 +42,8 @@ impl fmt::Display for Error {
             Error::ExpectedProductionSymbol => write!(f, "expected production symbol"),
             Error::GrammarLeftRecursive => write!(f, "grammar is left recursive"),
             Error::GrammarNotLL1 => write!(f, "grammar is not LL(1)"),
+            Error::InvalidInteger(s) => write!(f, "invalid integer '{}'", s),
+            Error::InvalidReal(s) => write!(f, "invalid real number '{}'", s),
             Error::NonTerminalNoProductions(s) => {
                 write!(f, "no productions found for non-terminal '{}'", s)
             }

@@ -110,6 +110,16 @@ impl Tree {
     /// terminals found at the leaves. This is essentially equivalent to
     /// reconstructing the input string.
     pub fn frontier(&self) -> String {
+        if let Some(root) = self.root {
+            self.frontier_node(root)
+        } else {
+            // Return the empty string if the tree is empty
+            String::new()
+        }
+    }
+
+    /// Returns the frontier of a sub-tree
+    pub fn frontier_node(&self, node: usize) -> String {
         let mut output = String::new();
 
         // Define this as a regular function rather than a closure, since we
@@ -128,10 +138,7 @@ impl Tree {
             }
         }
 
-        // Return the empty string if the tree is empty
-        if let Some(root) = self.root {
-            traverse(self, root, &mut output);
-        }
+        traverse(self, node, &mut output);
 
         output
     }

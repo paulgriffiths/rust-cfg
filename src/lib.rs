@@ -1,3 +1,4 @@
+pub mod calculator;
 pub mod errors;
 pub mod grammar;
 pub mod parsers;
