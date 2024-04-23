@@ -77,3 +77,49 @@ impl Hash for ItemStateSet {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::test::test_file_path;
+    use std::collections::HashSet;
+
+    #[test]
+    fn test_advance() {
+        let item = Item::new_production(0);
+        assert_eq!(item.dot, 0);
+
+        let item = item.advance();
+        assert_eq!(item.dot, 1);
+    }
+
+    #[test]
+    fn test_is_end() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let g = Grammar::new_from_file(&test_file_path("grammars/lr_simple_expr.cfg"))?;
+        let mut item = Item::new_production(0);
+
+        for _ in 0..g.production(0).body.len() {
+            assert!(!item.is_end(&g));
+            item = item.advance();
+        }
+        assert!(item.is_end(&g));
+
+        let item = Item::new_e(8);
+        assert!(item.is_end(&g));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_state_set() {
+        let first = ItemSet::from([Item::new_production(0), Item::new_production(1)]);
+
+        let second = ItemSet::from([Item::new_production(2), Item::new_production(3)]);
+
+        let mut state_set: HashSet<ItemStateSet> = HashSet::new();
+        state_set.insert(ItemStateSet(first.clone()));
+
+        assert!(state_set.contains(&ItemStateSet(first)));
+        assert!(!state_set.contains(&ItemStateSet(second)));
+    }
+}

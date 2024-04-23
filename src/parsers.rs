@@ -1,10 +1,13 @@
+pub mod canonicallr;
 mod items;
+mod lritems;
 pub mod parsetree;
 pub mod predictive;
 mod reader;
 pub mod recursivedescent;
 pub mod simplelr;
 use crate::grammar::{FirstItem, FollowItem};
+use std::cmp::{Ord, Ordering, PartialOrd};
 use std::convert::From;
 use std::fmt;
 
@@ -13,6 +16,27 @@ use std::fmt;
 pub enum InputSymbol {
     Character(char),
     EndOfInput,
+}
+
+impl Ord for InputSymbol {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match self {
+            Self::Character(i) => match other {
+                Self::Character(j) => i.cmp(j),
+                Self::EndOfInput => Ordering::Less,
+            },
+            Self::EndOfInput => match other {
+                Self::Character(_) => Ordering::Greater,
+                Self::EndOfInput => Ordering::Equal,
+            },
+        }
+    }
+}
+
+impl PartialOrd for InputSymbol {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 impl fmt::Display for InputSymbol {
@@ -42,5 +66,46 @@ impl From<FollowItem> for InputSymbol {
             FollowItem::Character(c) => InputSymbol::Character(c),
             FollowItem::EndOfInput => InputSymbol::EndOfInput,
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_cmp() {
+        assert!(InputSymbol::Character('t') < InputSymbol::Character('u'));
+        assert!(InputSymbol::Character('t') < InputSymbol::EndOfInput);
+        assert!(InputSymbol::EndOfInput > InputSymbol::Character('t'));
+        assert!(InputSymbol::EndOfInput <= InputSymbol::EndOfInput);
+        assert!(InputSymbol::EndOfInput >= InputSymbol::EndOfInput);
+    }
+
+    #[test]
+    fn test_from_first() {
+        let first = InputSymbol::from(FirstItem::Character('t'));
+        assert_eq!(first, InputSymbol::Character('t'));
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_from_first_empty() {
+        let _ = InputSymbol::from(FirstItem::Empty);
+    }
+
+    #[test]
+    fn test_from_follow() {
+        let first = InputSymbol::from(FollowItem::Character('t'));
+        assert_eq!(first, InputSymbol::Character('t'));
+
+        let first = InputSymbol::from(FollowItem::EndOfInput);
+        assert_eq!(first, InputSymbol::EndOfInput);
+    }
+
+    #[test]
+    fn test_display() {
+        assert_eq!(format!("{}", InputSymbol::Character('t')), "t");
+        assert_eq!(format!("{}", InputSymbol::EndOfInput), "<EOF>");
     }
 }

@@ -143,7 +143,7 @@ impl Grammar {
 
     /// Returns FIRST(symbols) where symbols is a string of grammar symbols.
     /// Panics if any of the symbols are ϵ.
-    fn first(&self, symbols: &[Symbol], include_e: bool) -> (FirstSet, bool) {
+    pub fn first(&self, symbols: &[Symbol], include_e: bool) -> (FirstSet, bool) {
         // Extract symbol IDs
         let string: Vec<usize> = symbols
             .iter()
