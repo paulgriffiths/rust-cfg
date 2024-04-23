@@ -31,20 +31,20 @@ impl PartialOrd for LRItem {
 
 impl LRItem {
     /// Returns a new item for a given production with the dot at the left end
-    pub fn new_production(p: usize, lookahead: &InputSymbol) -> LRItem {
+    pub fn new_production(production: usize, lookahead: InputSymbol) -> LRItem {
         LRItem {
             dot: 0,
-            production: p,
-            lookahead: *lookahead,
+            production,
+            lookahead,
         }
     }
 
     /// Returns a new item for ϵ
-    pub fn new_e(p: usize, lookahead: &InputSymbol) -> LRItem {
+    pub fn new_e(production: usize, lookahead: InputSymbol) -> LRItem {
         LRItem {
             dot: 1,
-            production: p,
-            lookahead: *lookahead,
+            production,
+            lookahead,
         }
     }
 
@@ -95,7 +95,7 @@ mod test {
 
     #[test]
     fn test_advance() {
-        let item = LRItem::new_production(0, &InputSymbol::Character('a'));
+        let item = LRItem::new_production(0, InputSymbol::Character('a'));
         assert_eq!(item.dot, 0);
 
         let item = item.advance();
@@ -105,7 +105,7 @@ mod test {
     #[test]
     fn test_is_end() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let g = Grammar::new_from_file(&test_file_path("grammars/lr_simple_expr.cfg"))?;
-        let mut item = LRItem::new_production(0, &InputSymbol::Character('a'));
+        let mut item = LRItem::new_production(0, InputSymbol::Character('a'));
 
         for _ in 0..g.production(0).body.len() {
             assert!(!item.is_end(&g));
@@ -113,7 +113,7 @@ mod test {
         }
         assert!(item.is_end(&g));
 
-        let item = LRItem::new_e(8, &InputSymbol::Character('b'));
+        let item = LRItem::new_e(8, InputSymbol::Character('b'));
         assert!(item.is_end(&g));
 
         Ok(())
@@ -122,13 +122,13 @@ mod test {
     #[test]
     fn test_state_set() {
         let first = LRItemSet::from([
-            LRItem::new_production(0, &InputSymbol::Character('a')),
-            LRItem::new_production(1, &InputSymbol::Character('b')),
+            LRItem::new_production(0, InputSymbol::Character('a')),
+            LRItem::new_production(1, InputSymbol::Character('b')),
         ]);
 
         let second = LRItemSet::from([
-            LRItem::new_production(2, &InputSymbol::Character('c')),
-            LRItem::new_production(3, &InputSymbol::Character('d')),
+            LRItem::new_production(2, InputSymbol::Character('c')),
+            LRItem::new_production(3, InputSymbol::Character('d')),
         ]);
 
         let mut state_set: HashSet<LRItemStateSet> = HashSet::new();

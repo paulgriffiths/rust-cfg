@@ -16,11 +16,11 @@ struct Collection {
 /// Returns the canonical collection of sets of LR(1) items for the given
 /// augmented grammar
 fn canonical_collection(g: &Grammar) -> Collection {
-    // Algorithm adapted from Aho et al (2007) p.246
+    // Algorithm adapted from Aho et al (2007) p.261
 
     let start_set = LRItemSet::from([LRItem::new_production(
         g.productions_for_non_terminal(g.start())[0],
-        &InputSymbol::EndOfInput,
+        InputSymbol::EndOfInput,
     )]);
 
     // Initialize collection with CLOSURE([Saug → ·S, $])
@@ -141,7 +141,7 @@ fn closure(g: &Grammar, items: &LRItemSet) -> LRItemSet {
                             // for (B, b)
                             if !seen.contains(&(nt, first)) {
                                 for production in g.productions_for_non_terminal(nt) {
-                                    closure.insert(LRItem::new_production(*production, &first));
+                                    closure.insert(LRItem::new_production(*production, first));
                                 }
                                 seen.insert((nt, first));
                             }
@@ -149,9 +149,9 @@ fn closure(g: &Grammar, items: &LRItemSet) -> LRItemSet {
                         Symbol::Empty => {
                             // If we have an ϵ-production, add the empty item to
                             // CLOSURE(items)
-                            closure.insert(LRItem::new_e(item.production, &first));
+                            closure.insert(LRItem::new_e(item.production, first));
                         }
-                        // We already skipped over terminals
+                        // We already skipped over terminals, so we shouldn't get here
                         Symbol::Terminal(_) => (),
                     }
                 }
@@ -200,7 +200,7 @@ mod test {
         assert_eq!(c.collection.len(), 10);
 
         // I0
-        let items = LRItemSet::from([LRItem::new_production(0, &InputSymbol::EndOfInput)]);
+        let items = LRItemSet::from([LRItem::new_production(0, InputSymbol::EndOfInput)]);
         assert_closure(
             &c.collection[0],
             &items,
@@ -379,7 +379,7 @@ mod test {
     fn assert_closure(got: &LRItemSet, kernels: &LRItemSet, non_kernels: &[(usize, InputSymbol)]) {
         let mut cmp = kernels.clone();
         for k in non_kernels {
-            cmp.insert(LRItem::new_production(k.0, &k.1));
+            cmp.insert(LRItem::new_production(k.0, k.1));
         }
         assert_eq!(got, &cmp);
     }
