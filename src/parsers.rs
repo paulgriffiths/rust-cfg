@@ -1,6 +1,7 @@
 pub mod canonicallr;
 mod items;
 mod lritems;
+pub mod lrparser;
 pub mod parsetree;
 pub mod predictive;
 mod reader;

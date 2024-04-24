@@ -1,4 +1,4 @@
-use crate::grammar::FollowItem;
+use crate::parsers::InputSymbol;
 use std::fmt;
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -20,7 +20,7 @@ pub enum Error {
     InvalidReal(String),
     NonTerminalNoProductions(String),
     ParseError(String),
-    ReduceReduceConflict(usize, FollowItem),
+    ReduceReduceConflict(usize, InputSymbol),
     ShiftReduceConflict(usize),
     TrailingInput,
     UnexpectedChar(char),

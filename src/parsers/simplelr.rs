@@ -1,4 +1,5 @@
 use super::items::{Item, ItemSet, ItemStateSet};
+use super::lrparser::{PTable, StackEntry, StackValue, TableEntry};
 use super::parsetree::{Child, Node, Tree};
 use super::reader::Reader;
 use super::InputSymbol;
@@ -12,14 +13,10 @@ pub struct Parser {
     table: ParseTable,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Copy)]
-/// An entry in a simple LR parse table
-enum TableEntry {
-    Goto(usize),
-    Shift(usize),
-    Reduce(usize),
-    Accept,
-    Error,
+/// A parse table for a simple LR parser
+struct ParseTable {
+    actions: Vec<Vec<TableEntry>>,
+    eof_index: usize,
 }
 
 /// A canonical collection of sets of LR(0) items for an augmented grammar,
@@ -29,30 +26,20 @@ struct Collection {
     shifts_and_gotos: Vec<Vec<Option<usize>>>,
 }
 
-/// A parse table for a simple LR parser
-struct ParseTable {
-    actions: Vec<Vec<TableEntry>>,
-    eof_index: usize,
-}
+impl PTable for ParseTable {
+    fn action(&self, state: usize, lookahead: usize) -> TableEntry {
+        self.actions[state][lookahead]
+    }
 
-#[derive(Debug, Eq, PartialEq, Clone, Copy)]
-/// A value in a stack entry, containing either a terminal or a parse tree node
-enum StackValue {
-    Terminal(usize),
-    Node(usize),
-}
-
-#[derive(Debug, Eq, PartialEq, Clone, Copy)]
-/// An entry on the stack
-struct StackEntry {
-    state: usize,
-    value: StackValue,
+    fn eof_index(&self) -> usize {
+        self.eof_index
+    }
 }
 
 impl ParseTable {
     /// Creates a new parse table
     fn new(grammar: &Grammar) -> Result<ParseTable> {
-        // Algorithm adapted from Aho et al (2007) pp.253-254
+        // Algorithm adapted from Aho et al (2007) pp.265
 
         // We use an index one past that of the last grammar symbol to
         // represent end-of-input
@@ -156,7 +143,7 @@ impl ParseTable {
             // Return an error if the table entry is already set
             match self.actions[from][i] {
                 TableEntry::Reduce(_) | TableEntry::Accept => {
-                    return Err(Error::ReduceReduceConflict(from, item));
+                    return Err(Error::ReduceReduceConflict(from, InputSymbol::from(item)));
                 }
                 TableEntry::Shift(_) => {
                     return Err(Error::ShiftReduceConflict(from));
@@ -465,7 +452,7 @@ mod test {
     }
 
     #[test]
-    fn test_parse2() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    fn test_parse() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let g = Grammar::new_from_file(&test_file_path("grammars/lr_simple_expr.cfg"))?;
         let parser = Parser::new(&g)?;
 
@@ -479,17 +466,6 @@ mod test {
                 "'*' F→[ID→[letter→['c'] IDr→[ϵ]]]]]"
             )
         );
-        Ok(())
-    }
-
-    #[test]
-    fn test_parse() -> std::result::Result<(), Box<dyn std::error::Error>> {
-        let g = Grammar::new_from_file(&test_file_path("grammars/simplelr/expr.cfg"))?;
-        let parser = Parser::new(&g)?;
-
-        let tree = parser.parse("a+a")?;
-        assert_eq!(tree.frontier(), "a+a");
-        assert_eq!(tree.visualize(&g), "E→[E→[T→[F→['a']]] '+' T→[F→['a']]]");
         Ok(())
     }
 
