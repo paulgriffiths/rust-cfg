@@ -1,11 +1,11 @@
 use cfg::grammar::Grammar;
-use cfg::parsers::canonicallr::Parser;
+use cfg::parsers::lr;
 mod common;
 
 #[test]
 fn test_parser() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let g = Grammar::new_from_file(&common::test_file_path("grammars/lr_simple_expr.cfg"))?;
-    let parser = Parser::new(&g)?;
+    let parser = lr::new_canonical(&g)?;
 
     let tree = parser.parse("(a+b)*charlie")?;
     assert_eq!(tree.frontier(), "(a+b)*charlie");

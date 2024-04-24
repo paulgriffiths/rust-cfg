@@ -1,8 +1,10 @@
 use super::value::Value;
 use crate::errors::{Error, Result};
 use crate::grammar::Grammar;
+use crate::parsers::lr;
+use crate::parsers::lr::Parser;
 use crate::parsers::parsetree::{Child, Node, Tree};
-use crate::parsers::simplelr::Parser;
+use crate::parsers::simplelr::ParseTable;
 
 static GRAMMAR_TEXT: &str = "
 # Addition, subtraction, multiplication and division are left-associative
@@ -27,7 +29,7 @@ digit   → '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9'
 /// Evaluates expressions to demonstrate using the parse tree returned by a
 /// parser generator to perform actual work
 pub struct Engine {
-    parser: Parser,
+    parser: Parser<ParseTable>,
 }
 
 impl Default for Engine {
@@ -40,7 +42,7 @@ impl Engine {
     /// Returns a new expression evaluation engine
     pub fn new() -> Engine {
         let grammar = Grammar::new(GRAMMAR_TEXT).expect("bad grammar");
-        let parser = Parser::new(&grammar).expect("bad grammar");
+        let parser = lr::new_simple(&grammar).expect("bad grammar");
 
         Engine { parser }
     }

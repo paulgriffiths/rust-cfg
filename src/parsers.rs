@@ -1,12 +1,13 @@
 pub mod canonicallr;
 mod items;
+pub mod lr;
 mod lritems;
-pub mod lrparser;
 pub mod parsetree;
 pub mod predictive;
 mod reader;
 pub mod recursivedescent;
 pub mod simplelr;
+mod stack;
 use crate::grammar::{FirstItem, FollowItem};
 use std::cmp::{Ord, Ordering, PartialOrd};
 use std::convert::From;
