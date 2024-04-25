@@ -1,10 +1,29 @@
+use cfg::cli::args::{Commands, Options};
+use cfg::cli::info;
+use cfg::cli::parsetree;
 use cfg::grammar::Grammar;
-use cfg::parsers::predictive::Parser;
+use clap::Parser as ClapParser;
 
 fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
-    let grammar = Grammar::new("A → B | C\nB → 'fish' | ϵ\nC → 'chips'")?;
-    let parser = Parser::new(&grammar)?;
-    parser.parse("chips")?;
+    let cli = Options::parse();
+    let g = Grammar::new_from_file(&cli.grammar)?;
+
+    match &cli.command {
+        Some(Commands::Info { verbose }) => {
+            info::output(&g, *verbose);
+        }
+        Some(Commands::ParseTree { input, indent }) => {
+            let indent = if let Some(i) = indent {
+                (*i).max(2usize)
+            } else {
+                2
+            };
+            parsetree::output(&g, input, indent)?;
+        }
+        None => {
+            panic!("no command");
+        }
+    }
 
     Ok(())
 }

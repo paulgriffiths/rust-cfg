@@ -1,4 +1,5 @@
 pub mod calculator;
+pub mod cli;
 pub mod errors;
 pub mod grammar;
 pub mod parsers;
