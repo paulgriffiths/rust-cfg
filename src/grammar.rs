@@ -243,6 +243,58 @@ impl Grammar {
         out
     }
 
+    /// Returns a string representation of a string of grammar symbols
+    pub fn format_symbols(&self, symbols: &[Symbol]) -> String {
+        let mut out = String::new();
+
+        for (i, symbol) in symbols.iter().enumerate() {
+            match symbol {
+                Symbol::NonTerminal(id) => {
+                    out.push_str(
+                        format!(
+                            "{}{}",
+                            // Output a space before a non-terminal unless it is
+                            // the first symbol or the previous symbol is a
+                            // terminal which already consists of whitespace
+                            if i == 0 {
+                                ""
+                            } else if let Symbol::Terminal(t) = symbols[i - 1] {
+                                if self.terminal_value(t).is_whitespace() {
+                                    ""
+                                } else {
+                                    " "
+                                }
+                            } else {
+                                " "
+                            },
+                            &self.non_terminal_name(*id)
+                        )
+                        .as_str(),
+                    );
+                }
+                Symbol::Terminal(id) => {
+                    out.push_str(
+                        format!(
+                            "{}{}",
+                            // Output a space before a terminal unless is is the first
+                            // symbol or the previous symbol is also a terminal
+                            if i == 0 || matches!(symbols[i - 1], Symbol::Terminal(_)) {
+                                ""
+                            } else {
+                                " "
+                            },
+                            self.terminal_value(*id)
+                        )
+                        .as_str(),
+                    );
+                }
+                Symbol::Empty => (),
+            }
+        }
+
+        out
+    }
+
     /// Returns true if the grammar is left recursive, that is, if there is a
     /// non-terminal A such that there is a derivation of A ⇒ A𝛼 for some
     /// string 𝛼.

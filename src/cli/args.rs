@@ -13,6 +13,13 @@ pub struct Options {
 #[derive(Subcommand)]
 /// Commands for the cfg tool
 pub enum Commands {
+    Derive {
+        #[arg(long)]
+        input: String,
+
+        #[arg(long)]
+        rightmost: bool,
+    },
     Info {
         #[arg(short, long)]
         verbose: bool,

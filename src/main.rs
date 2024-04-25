@@ -1,4 +1,5 @@
 use cfg::cli::args::{Commands, Options};
+use cfg::cli::derive;
 use cfg::cli::info;
 use cfg::cli::parsetree;
 use cfg::grammar::Grammar;
@@ -9,6 +10,12 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let g = Grammar::new_from_file(&cli.grammar)?;
 
     match &cli.command {
+        Some(Commands::Derive { input, rightmost }) => {
+            if *rightmost {
+                panic!("rightmost derivation not yet supported");
+            }
+            derive::output_left(&g, input)?;
+        }
         Some(Commands::Info { verbose }) => {
             info::output(&g, *verbose);
         }
