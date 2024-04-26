@@ -102,6 +102,61 @@ impl Tree {
         steps
     }
 
+    /// Returns the steps in a rightmost derivation of this tree
+    pub fn derive_right(&self, g: &Grammar) -> Vec<Vec<Symbol>> {
+        // Return an empty vector if the tree is empty
+        let Some(root) = self.root else {
+            return Vec::new();
+        };
+
+        // Add the start symbol as the first step in the derivation
+        let mut steps: Vec<Vec<Symbol>> = vec![vec![Symbol::NonTerminal(
+            g.production(self.nodes[root].production).head,
+        )]];
+
+        // Adds a step to a rightmost derivation by replacing the non-terminal
+        // at index replace with the production represented by node
+        fn next_step(
+            tree: &Tree,
+            g: &Grammar,
+            node: usize,
+            steps: &mut Vec<Vec<Symbol>>,
+            replace: usize,
+        ) {
+            let node = &tree.nodes[node];
+            let production = g.production(node.production);
+
+            // Make a copy of the previous step
+            let mut new_step = steps.last().unwrap().clone();
+
+            // Just remove the non-terminal if this is an ϵ-production
+            if production.is_e() {
+                new_step.remove(replace);
+                steps.push(new_step);
+
+                return;
+            }
+
+            // Otherwise replace the non-terminal with the production body
+            let _ = new_step
+                .splice(replace..replace + 1, production.body.clone())
+                .collect::<Vec<Symbol>>();
+            steps.push(new_step);
+
+            // Recursively replace any non-terminal children from right-to-left
+            for (i, child) in node.children.iter().rev().enumerate() {
+                if let Child::NonTerminal(nt) = child {
+                    let replace = replace + node.children.len() - (i + 1);
+                    next_step(tree, g, *nt, steps, replace);
+                }
+            }
+        }
+
+        next_step(self, g, root, &mut steps, 0);
+
+        steps
+    }
+
     /// Restores the parse tree to its most recently saved state
     pub fn restore(&mut self) {
         self.root = self.stack.pop().expect("stack empty!");
@@ -235,6 +290,39 @@ mod test {
                 "a+b* letter IDr",
                 "a+b*c IDr",
                 "a+b*c",
+            ],
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_derive_right() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let g = Grammar::new_from_file(&test_file_path("grammars/lr_simple_expr.cfg"))?;
+        let derivation = lr::new_canonical(&g)?.parse("a+b*c")?.derive_right(&g);
+        let formatted: Vec<_> = derivation.iter().map(|s| g.format_symbols(s)).collect();
+
+        assert_eq!(
+            formatted,
+            vec![
+                "E",
+                "E + T",
+                "E + T * F",
+                "E + T * ID",
+                "E + T * letter IDr",
+                "E + T * letter",
+                "E + T *c",
+                "E + F *c",
+                "E + ID *c",
+                "E + letter IDr *c",
+                "E + letter *c",
+                "E +b*c",
+                "T +b*c",
+                "F +b*c",
+                "ID +b*c",
+                "letter IDr +b*c",
+                "letter +b*c",
+                "a+b*c"
             ],
         );
 

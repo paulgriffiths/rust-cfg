@@ -12,9 +12,10 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     match &cli.command {
         Some(Commands::Derive { input, rightmost }) => {
             if *rightmost {
-                panic!("rightmost derivation not yet supported");
+                derive::output_right(&g, input)?;
+            } else {
+                derive::output_left(&g, input)?;
             }
-            derive::output_left(&g, input)?;
         }
         Some(Commands::Info { verbose }) => {
             info::output(&g, *verbose);
