@@ -65,7 +65,7 @@ impl SymbolTable {
 
     /// Returns true if the symbol table contains a non-terminal with the
     /// given name
-    pub fn contains_non_terminal_name(&self, name: &str) -> bool {
+    pub fn contains_non_terminal(&self, name: &str) -> bool {
         self.non_terminals.contains_key(name)
     }
 
@@ -101,6 +101,11 @@ impl SymbolTable {
         &self.non_terminal_ids
     }
 
+    /// Returns the index of a non-terminal
+    pub fn non_terminal_index(&self, s: &str) -> usize {
+        *self.non_terminals.get(s).unwrap()
+    }
+
     /// Returns the string value of the non-terminal with the given ID. Panics
     /// if there is no non-terminal with the given ID in the symbol table.
     pub fn non_terminal_value(&self, i: usize) -> String {
@@ -122,6 +127,7 @@ impl SymbolTable {
         &self.terminal_ids
     }
 
+    /// Returns the index of a terminal character
     pub fn terminal_index(&self, c: char) -> usize {
         *self.terminals.get(&c).unwrap()
     }

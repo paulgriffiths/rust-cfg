@@ -105,7 +105,7 @@ impl Grammar {
         // and adding as many underscores as we need until we find a name which
         // is not already in the symbol table
         let mut name = String::from("Saug");
-        while symbol_table.contains_non_terminal_name(&name) {
+        while symbol_table.contains_non_terminal(&name) {
             name.push('_');
         }
 
@@ -417,6 +417,16 @@ impl Grammar {
         true
     }
 
+    /// Returns the index of a non-terminal, or None if the non-terminal is not
+    /// recognized
+    pub fn maybe_non_terminal_index(&self, s: &str) -> Option<usize> {
+        if self.symbol_table.contains_non_terminal(s) {
+            Some(self.symbol_table.non_terminal_index(s))
+        } else {
+            None
+        }
+    }
+
     /// Returns the index of a terminal, or None if the terminal is not
     /// recognized
     pub fn maybe_terminal_index(&self, c: char) -> Option<usize> {
@@ -442,6 +452,7 @@ impl Grammar {
         self.productions.len()
     }
 
+    /// Returns the production with the given index
     pub fn production(&self, i: usize) -> &Production {
         &self.productions[i]
     }

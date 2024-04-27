@@ -1,10 +1,10 @@
+use super::common;
 use crate::grammar::Grammar;
 use crate::parsers::lr;
 
 /// Outputs information about a grammar
 pub fn output(g: &Grammar, verbose: bool) {
     let width = 24;
-    let line_length = 72;
 
     println!(
         "{:w$}: {}",
@@ -54,7 +54,7 @@ pub fn output(g: &Grammar, verbose: bool) {
         let mut line = String::new();
         for i in g.non_terminal_ids() {
             let value = g.non_terminal_name(*i);
-            if value.len() + 1 + line.len() > (line_length - width) {
+            if value.len() + 1 + line.len() > (common::LINE_LENGTH - width) {
                 println!("{}", line);
                 line = String::new();
             } else {
@@ -74,7 +74,7 @@ pub fn output(g: &Grammar, verbose: bool) {
         let mut line = String::new();
         for i in g.terminal_ids() {
             let value = format!("'{}'", g.terminal_value(*i));
-            if value.len() + 1 + line.len() > (line_length - width) {
+            if value.len() + 1 + line.len() > (common::LINE_LENGTH - width) {
                 println!("{}", line);
                 line = String::new();
             } else {

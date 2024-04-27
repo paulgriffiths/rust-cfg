@@ -16,13 +16,22 @@ pub struct Options {
 pub enum Commands {
     /// Output a derivation of a sentence
     Derive {
-        #[arg(short, long)]
         /// The sentence to derive
         input: String,
 
         #[arg(short, long)]
         /// Output a rightmost derivation (default is leftmost)
         rightmost: bool,
+    },
+    /// Output FIRST(string)
+    First {
+        /// A string of grammar symbols
+        string: String,
+    },
+    /// Output FOLLOW(non_terminal)
+    Follow {
+        /// A non-terminal
+        non_terminal: String,
     },
     /// Show information about a context-free grammar
     Info {
@@ -32,7 +41,6 @@ pub enum Commands {
     },
     /// Output a parse tree for a sentence
     ParseTree {
-        #[arg(short, long)]
         /// The sentence to parse
         input: String,
 

@@ -1,5 +1,7 @@
 use cfg::cli::args::{Commands, Options};
 use cfg::cli::derive;
+use cfg::cli::first;
+use cfg::cli::follow;
 use cfg::cli::info;
 use cfg::cli::parsetree;
 use cfg::grammar::Grammar;
@@ -16,6 +18,12 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             } else {
                 derive::output_left(&g, input)?;
             }
+        }
+        Some(Commands::First { string }) => {
+            first::output(&g, string);
+        }
+        Some(Commands::Follow { non_terminal }) => {
+            follow::output(&g, non_terminal);
         }
         Some(Commands::Info { verbose }) => {
             info::output(&g, *verbose);
