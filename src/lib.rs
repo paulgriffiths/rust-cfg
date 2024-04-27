@@ -4,6 +4,7 @@ pub mod errors;
 pub mod grammar;
 pub mod parsers;
 pub mod position;
+mod utils;
 
 #[cfg(test)]
 mod test {

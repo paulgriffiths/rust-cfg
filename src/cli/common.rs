@@ -2,16 +2,6 @@ use crate::grammar::{Grammar, Symbol};
 
 pub const LINE_LENGTH: usize = 72;
 
-/// Converts a character to a string, escaping if necessary
-pub fn format_char(c: char) -> String {
-    match c {
-        '\n' => "\\n".to_string(),
-        '\r' => "\\r".to_string(),
-        '\t' => "\\t".to_string(),
-        _ => c.to_string(),
-    }
-}
-
 /// Returns the length of the longest non-terminal name in the grammar
 pub fn longest_non_terminal_name(g: &Grammar) -> usize {
     let mut max = 0;

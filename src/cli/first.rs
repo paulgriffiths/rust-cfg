@@ -1,34 +1,17 @@
 use super::common;
-use crate::grammar::{FirstItem, Grammar};
-use std::cmp::Ordering;
+use crate::grammar::Grammar;
 
 /// Outputs FIRST(s)
 pub fn output(g: &Grammar, s: &str) {
     // Sort first items so that ϵ appears last
     let (firsts, _) = g.first(&common::parse_grammar_symbols(g, s), true);
     let mut firsts: Vec<_> = firsts.into_iter().collect();
-    firsts.sort_by(|a, b| match a {
-        FirstItem::Character(c) => match b {
-            FirstItem::Character(d) => c.cmp(d),
-            FirstItem::Empty => Ordering::Less,
-        },
-        FirstItem::Empty => match b {
-            FirstItem::Character(_) => Ordering::Greater,
-            FirstItem::Empty => Ordering::Equal,
-        },
-    });
+    firsts.sort();
 
     let mut n = 0;
 
     for f in firsts {
-        let out = format!(
-            "{}{}",
-            if n == 0 { "" } else { " " },
-            match f {
-                FirstItem::Character(c) => format!("'{}'", common::format_char(c)),
-                FirstItem::Empty => "ϵ".to_string(),
-            }
-        );
+        let out = format!("{}{}", if n == 0 { "" } else { " " }, f,);
 
         n += out.len();
         if n > common::LINE_LENGTH {

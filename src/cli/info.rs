@@ -73,7 +73,7 @@ pub fn output(g: &Grammar, verbose: bool) {
 
         let mut line = String::new();
         for i in g.terminal_ids() {
-            let value = format!("'{}'", g.terminal_value(*i));
+            let value = format!("'{}'", g.terminal_string(*i));
             if value.len() + 1 + line.len() > (common::LINE_LENGTH - width) {
                 println!("{}", line);
                 line = String::new();

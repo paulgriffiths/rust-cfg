@@ -4,6 +4,7 @@ mod lexer;
 mod parser;
 mod symboltable;
 mod token;
+use super::utils;
 use crate::errors::Result;
 use crate::parsers::{InputSymbol, Item, LRItem};
 pub use firstfollow::{FirstItem, FirstSet, FirstVector, FollowItem, FollowMap, FollowSet};
@@ -142,16 +143,6 @@ impl Grammar {
         }
     }
 
-    /// Converts a character to a string, escaping if necessary
-    fn char_to_string(&self, c: char) -> String {
-        match c {
-            '\n' => "\\n".to_string(),
-            '\r' => "\\r".to_string(),
-            '\t' => "\\t".to_string(),
-            _ => c.to_string(),
-        }
-    }
-
     /// Returns FIRST(symbols) where symbols is a string of grammar symbols.
     /// Panics if any of the symbols are ϵ.
     pub fn first(&self, symbols: &[Symbol], include_e: bool) -> (FirstSet, bool) {
@@ -274,7 +265,7 @@ impl Grammar {
         });
 
         match item.lookahead {
-            InputSymbol::Character(c) => format!("{}, '{}'", slr_item, self.char_to_string(c)),
+            InputSymbol::Character(c) => format!("{}, '{}'", slr_item, utils::format_char(c)),
             InputSymbol::EndOfInput => format!("{}, $", slr_item),
         }
     }
@@ -557,7 +548,7 @@ impl Grammar {
 
     /// Returns the string value of a terminal, escaping if necessary
     pub fn terminal_string(&self, id: usize) -> String {
-        self.char_to_string(self.symbol_table.terminal_value(id))
+        utils::format_char(self.symbol_table.terminal_value(id))
     }
 
     /// Returns the character value of a terminal

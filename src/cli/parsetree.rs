@@ -1,8 +1,8 @@
-use super::common;
 use crate::errors::Result;
 use crate::grammar::Grammar;
 use crate::parsers::lr;
 use crate::parsers::parsetree::{Child, Tree};
+use crate::utils;
 
 /// Outputs a parse tree for the given input, using a canonical LR parser
 pub fn output(g: &Grammar, input: &str, indent: usize) -> Result<()> {
@@ -26,7 +26,7 @@ pub fn output(g: &Grammar, input: &str, indent: usize) -> Result<()> {
                     traverse(g, tree, *nt, lasts, indent);
                 }
                 Child::Terminal(t) => {
-                    print_node(&format!("'{}'", common::format_char(*t)), lasts, indent);
+                    print_node(&format!("'{}'", utils::format_char(*t)), lasts, indent);
                 }
                 Child::Empty => {
                     print_node("ϵ", lasts, indent);

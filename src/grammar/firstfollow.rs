@@ -1,5 +1,8 @@
 use super::symboltable::SymbolTable;
 use super::{Production, Symbol};
+use crate::utils;
+use std::cmp::{Ord, Ordering, PartialOrd};
+use std::fmt;
 
 pub type FirstSet = std::collections::HashSet<FirstItem>;
 pub type FirstVector = Vec<FirstSet>;
@@ -18,6 +21,66 @@ pub enum FirstItem {
 pub enum FollowItem {
     Character(char),
     EndOfInput,
+}
+
+impl fmt::Display for FirstItem {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            FirstItem::Character(c) => write!(f, "'{}'", utils::format_char(*c)),
+            FirstItem::Empty => write!(f, "ϵ"),
+        }
+    }
+}
+
+impl Ord for FirstItem {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match self {
+            Self::Character(i) => match other {
+                Self::Character(j) => i.cmp(j),
+                Self::Empty => Ordering::Less,
+            },
+            Self::Empty => match other {
+                Self::Character(_) => Ordering::Greater,
+                Self::Empty => Ordering::Equal,
+            },
+        }
+    }
+}
+
+impl PartialOrd for FirstItem {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl fmt::Display for FollowItem {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            FollowItem::Character(c) => write!(f, "'{}'", utils::format_char(*c)),
+            FollowItem::EndOfInput => write!(f, "$"),
+        }
+    }
+}
+
+impl Ord for FollowItem {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match self {
+            Self::Character(i) => match other {
+                Self::Character(j) => i.cmp(j),
+                Self::EndOfInput => Ordering::Less,
+            },
+            Self::EndOfInput => match other {
+                Self::Character(_) => Ordering::Greater,
+                Self::EndOfInput => Ordering::Equal,
+            },
+        }
+    }
+}
+
+impl PartialOrd for FollowItem {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 /// Builds FIRST and FOLLOW sets for a context-free grammar
