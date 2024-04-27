@@ -1,4 +1,3 @@
-use crate::parsers::InputSymbol;
 use std::fmt;
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -15,13 +14,13 @@ pub enum Error {
     ExpectedNonTerminal,
     ExpectedProductionSymbol,
     GrammarLeftRecursive,
-    GrammarNotLL1,
+    GrammarNotLL1(String),
+    GrammarNotLR0(String),
+    GrammarNotLR1(String),
     InvalidInteger(String),
     InvalidReal(String),
     NonTerminalNoProductions(String),
     ParseError(String),
-    ReduceReduceConflict(usize, InputSymbol),
-    ShiftReduceConflict(usize),
     TrailingInput,
     UnexpectedChar(char),
     UnrecognizedEscapeChar(char),
@@ -43,22 +42,15 @@ impl fmt::Display for Error {
             Error::ExpectedNonTerminal => write!(f, "expected non-terminal"),
             Error::ExpectedProductionSymbol => write!(f, "expected production symbol"),
             Error::GrammarLeftRecursive => write!(f, "grammar is left recursive"),
-            Error::GrammarNotLL1 => write!(f, "grammar is not LL(1)"),
+            Error::GrammarNotLL1(s) => write!(f, "grammar is not LL(1): {}", s),
+            Error::GrammarNotLR0(s) => write!(f, "grammar is not LR(0): {}", s),
+            Error::GrammarNotLR1(s) => write!(f, "grammar is not LR(1): {}", s),
             Error::InvalidInteger(s) => write!(f, "invalid integer '{}'", s),
             Error::InvalidReal(s) => write!(f, "invalid real number '{}'", s),
             Error::NonTerminalNoProductions(s) => {
                 write!(f, "no productions found for non-terminal '{}'", s)
             }
             Error::ParseError(s) => write!(f, "parse error: {}", s),
-            // TODO: Implement Display trait for FollowItem
-            Error::ReduceReduceConflict(s, c) => write!(
-                f,
-                "parse error: reduce-reduce conflict for state {} input '{:?}'",
-                s, c
-            ),
-            Error::ShiftReduceConflict(s) => {
-                write!(f, "parse error: shift-reduce conflict for state {}", s)
-            }
             Error::TrailingInput => write!(f, "trailing input"),
             Error::UnexpectedChar(c) => write!(f, "unexpected input character '{}'", c),
             Error::UnrecognizedEscapeChar(c) => {

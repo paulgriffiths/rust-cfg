@@ -36,14 +36,14 @@ impl ParseTable {
             // table[head, a]
             let (first, contains_e) = g.first_production(production, false);
             for f in first {
-                table.insert(head, InputSymbol::from(f), production)?;
+                table.insert(g, head, InputSymbol::from(f), production)?;
             }
 
             // If FIRST(body) contains ϵ, for each terminal or end-of-input
             // marker b in FOLLOW(head), add the production to table[head, a]
             if contains_e {
                 for f in g.follow(head) {
-                    table.insert(head, InputSymbol::from(f), production)?;
+                    table.insert(g, head, InputSymbol::from(f), production)?;
                 }
             }
         }
@@ -52,11 +52,17 @@ impl ParseTable {
     }
 
     /// Inserts an entry into the parse table
-    fn insert(&mut self, nt: usize, s: InputSymbol, production: usize) -> Result<()> {
+    fn insert(&mut self, g: &Grammar, nt: usize, s: InputSymbol, production: usize) -> Result<()> {
         match self.entries.get_mut(&nt).unwrap().entry(s) {
-            hash_map::Entry::Occupied(_) => {
+            hash_map::Entry::Occupied(o) => {
                 // Grammar is not LL(1) if there are collisions
-                return Err(Error::GrammarNotLL1);
+                return Err(Error::GrammarNotLL1(format!(
+                    "conflict for non-terminal {} on input symbol '{}', productions [{}] and [{}]",
+                    g.non_terminal_name(nt),
+                    s,
+                    g.format_production(*o.get()),
+                    g.format_production(production)
+                )));
             }
             hash_map::Entry::Vacant(v) => {
                 v.insert(production);
@@ -128,7 +134,17 @@ mod test {
     #[test]
     fn test_parse_table_not_ll_one() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let g = Grammar::new_from_file(&test_file_path("grammars/lr_simple_expr.cfg"))?;
-        assert!(matches!(ParseTable::new(&g), Err(Error::GrammarNotLL1)));
+        match ParseTable::new(&g) {
+            Err(Error::GrammarNotLL1(s)) => {
+                assert!(s.starts_with("conflict for non-terminal"));
+            }
+            Err(e) => {
+                panic!("unexpected error: {}", e);
+            }
+            Ok(_) => {
+                panic!("no error when one was expected");
+            }
+        }
 
         Ok(())
     }

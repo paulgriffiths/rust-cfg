@@ -90,8 +90,25 @@ impl ParseTable {
     fn add_shift(&mut self, from: usize, to: usize, t: usize) -> Result<()> {
         // Return an error if the table entry is already set
         match self.actions[from][t] {
-            TableEntry::Reduce(_) | TableEntry::Accept => {
-                return Err(Error::ShiftReduceConflict(from));
+            TableEntry::Reduce(p) => {
+                return Err(Error::GrammarNotLR0(format!(
+                    concat!(
+                        "conflict between shift({}) and reduce({}) ",
+                        "for state {} on input character '{}'"
+                    ),
+                    to,
+                    self.grammar.format_production(p),
+                    from,
+                    self.grammar.terminal_value(t)
+                )));
+            }
+            TableEntry::Accept => {
+                return Err(Error::GrammarNotLR0(format!(
+                    "conflict between shift({}) and accept for state {} on input character '{}'",
+                    to,
+                    from,
+                    self.grammar.terminal_value(t)
+                )));
             }
             // Shouldn't happen, since GOTO is for non-terminals, and
             // reductions are for terminals/end-of-input
@@ -138,11 +155,40 @@ impl ParseTable {
 
             // Return an error if the table entry is already set
             match self.actions[from][i] {
-                TableEntry::Reduce(_) | TableEntry::Accept => {
-                    return Err(Error::ReduceReduceConflict(from, InputSymbol::from(item)));
+                TableEntry::Accept => {
+                    return Err(Error::GrammarNotLR0(format!(
+                        concat!(
+                            "conflict between reduce({}) and accept ",
+                            "for state {} on input character '{}'"
+                        ),
+                        self.grammar.format_production(p),
+                        from,
+                        InputSymbol::from(item),
+                    )));
                 }
-                TableEntry::Shift(_) => {
-                    return Err(Error::ShiftReduceConflict(from));
+                TableEntry::Reduce(r) => {
+                    return Err(Error::GrammarNotLR0(format!(
+                        concat!(
+                            "conflict between reduce({}) and reduce({}) ",
+                            "for state {} on input character '{}'"
+                        ),
+                        self.grammar.format_production(p),
+                        self.grammar.format_production(r),
+                        from,
+                        InputSymbol::from(item),
+                    )));
+                }
+                TableEntry::Shift(s) => {
+                    return Err(Error::GrammarNotLR0(format!(
+                        concat!(
+                            "conflict between shift({}) and reduce({}) ",
+                            "for state {} on input character '{}'"
+                        ),
+                        s,
+                        self.grammar.format_production(p),
+                        from,
+                        InputSymbol::from(item),
+                    )));
                 }
                 // Shouldn't happen, since GOTO is for non-terminals, and
                 // reductions are for terminals/end-of-input
@@ -762,6 +808,14 @@ mod test {
             production: 5,
         }]);
         assert_closure(&c.collection[11], &items, &[]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_parse_table_not_lr_zero() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let g = Grammar::new_from_file(&test_file_path("grammars/balanced_parentheses.cfg"))?;
+        assert!(matches!(ParseTable::new(g), Err(Error::GrammarNotLR0(_))));
 
         Ok(())
     }
