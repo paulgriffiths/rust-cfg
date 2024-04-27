@@ -1,3 +1,4 @@
+use super::common;
 use crate::errors::Result;
 use crate::grammar::Grammar;
 use crate::parsers::lr;
@@ -25,7 +26,7 @@ pub fn output(g: &Grammar, input: &str, indent: usize) -> Result<()> {
                     traverse(g, tree, *nt, lasts, indent);
                 }
                 Child::Terminal(t) => {
-                    print_node(&format!("'{}'", t), lasts, indent);
+                    print_node(&format!("'{}'", common::format_char(*t)), lasts, indent);
                 }
                 Child::Empty => {
                     print_node("ϵ", lasts, indent);

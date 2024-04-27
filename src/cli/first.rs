@@ -25,7 +25,7 @@ pub fn output(g: &Grammar, s: &str) {
             "{}{}",
             if n == 0 { "" } else { " " },
             match f {
-                FirstItem::Character(c) => format!("'{}'", c),
+                FirstItem::Character(c) => format!("'{}'", common::format_char(c)),
                 FirstItem::Empty => "ϵ".to_string(),
             }
         );

@@ -27,7 +27,7 @@ pub fn output(g: &Grammar, nt: &str) {
             "{}{}",
             if n == 0 { "" } else { " " },
             match f {
-                FollowItem::Character(c) => format!("'{}'", c),
+                FollowItem::Character(c) => format!("'{}'", common::format_char(c)),
                 FollowItem::EndOfInput => "$".to_string(),
             }
         );

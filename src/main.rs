@@ -6,6 +6,7 @@ use cfg::cli::follow;
 use cfg::cli::info;
 use cfg::cli::parsetree;
 use cfg::cli::productions;
+use cfg::cli::symbols;
 use cfg::grammar::Grammar;
 use clap::Parser as ClapParser;
 
@@ -47,6 +48,9 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         }
         Some(Commands::Productions) => {
             productions::output(&g);
+        }
+        Some(Commands::Symbols) => {
+            symbols::output(&g);
         }
         None => {
             panic!("no command");

@@ -56,4 +56,6 @@ pub enum Commands {
     },
     /// Output a list of the productions in the grammar
     Productions,
+    /// Output a list of the symbols in the grammar
+    Symbols,
 }

@@ -142,6 +142,16 @@ impl Grammar {
         }
     }
 
+    /// Converts a character to a string, escaping if necessary
+    fn char_to_string(&self, c: char) -> String {
+        match c {
+            '\n' => "\\n".to_string(),
+            '\r' => "\\r".to_string(),
+            '\t' => "\\t".to_string(),
+            _ => c.to_string(),
+        }
+    }
+
     /// Returns FIRST(symbols) where symbols is a string of grammar symbols.
     /// Panics if any of the symbols are ϵ.
     pub fn first(&self, symbols: &[Symbol], include_e: bool) -> (FirstSet, bool) {
@@ -243,7 +253,7 @@ impl Grammar {
                     out.push_str(self.non_terminal_name(*id).as_str());
                 }
                 Symbol::Terminal(id) => {
-                    out.push_str(format!("'{}'", &self.terminal_value(*id)).as_str());
+                    out.push_str(format!("'{}'", &self.terminal_string(*id)).as_str());
                 }
                 Symbol::Empty => (),
             }
@@ -264,7 +274,7 @@ impl Grammar {
         });
 
         match item.lookahead {
-            InputSymbol::Character(c) => format!("{}, '{}'", slr_item, c),
+            InputSymbol::Character(c) => format!("{}, '{}'", slr_item, self.char_to_string(c)),
             InputSymbol::EndOfInput => format!("{}, $", slr_item),
         }
     }
@@ -292,7 +302,7 @@ impl Grammar {
                     out.push_str(format!(" {}", &self.non_terminal_name(*id)).as_str());
                 }
                 Symbol::Terminal(id) => {
-                    out.push_str(format!(" '{}'", &self.terminal_value(*id)).as_str());
+                    out.push_str(format!(" '{}'", &self.terminal_string(*id)).as_str());
                 }
                 Symbol::Empty => {
                     out.push_str(" ϵ");
@@ -343,7 +353,7 @@ impl Grammar {
                             } else {
                                 " "
                             },
-                            self.terminal_value(*id)
+                            self.terminal_string(*id)
                         )
                         .as_str(),
                     );
@@ -545,7 +555,12 @@ impl Grammar {
         self.symbol_table.terminal_index(c)
     }
 
-    /// Returns the string value of a terminal
+    /// Returns the string value of a terminal, escaping if necessary
+    pub fn terminal_string(&self, id: usize) -> String {
+        self.char_to_string(self.symbol_table.terminal_value(id))
+    }
+
+    /// Returns the character value of a terminal
     pub fn terminal_value(&self, id: usize) -> char {
         self.symbol_table.terminal_value(id)
     }

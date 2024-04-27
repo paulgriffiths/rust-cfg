@@ -7,3 +7,4 @@ pub mod follow;
 pub mod info;
 pub mod parsetree;
 pub mod productions;
+pub mod symbols;
