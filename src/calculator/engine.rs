@@ -207,7 +207,9 @@ mod test {
         );
         assert_eq!(
             engine.evaluate("3*/4"),
-            Err(Error::ParseError(String::from("no parser action")))
+            Err(Error::ParseError(String::from(
+                "no parser action for input character '/'"
+            )))
         );
     }
 }

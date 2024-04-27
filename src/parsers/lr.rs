@@ -88,7 +88,13 @@ impl<T: PTable> Parser<T> {
                     break;
                 }
                 TableEntry::Error => {
-                    return Err(Error::ParseError(String::from("no parser action")));
+                    return Err(Error::ParseError(
+                        format!(
+                            "no parser action for input character '{}'",
+                            reader.lookahead()
+                        )
+                        .to_string(),
+                    ));
                 }
                 TableEntry::Goto(_) => {
                     // Shouldn't happen, since GOTO is for non-terminals, and
@@ -96,14 +102,6 @@ impl<T: PTable> Parser<T> {
                     panic!("GOTO found in actions");
                 }
             }
-        }
-
-        // Ensure we consumed all the input during the parse
-        if reader.lookahead() != InputSymbol::EndOfInput {
-            return Err(Error::ParseError(format!(
-                "trailing input after parse: {:?}",
-                reader.lookahead()
-            )));
         }
 
         Ok(tree)
@@ -146,7 +144,7 @@ impl<T: PTable> Parser<T> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::test::{assert_error_text, test_file_path};
+    use crate::test::{assert_parse_error, test_file_path};
 
     #[test]
     fn test_parse_simple() -> std::result::Result<(), Box<dyn std::error::Error>> {
@@ -186,13 +184,16 @@ mod test {
 
     #[test]
     fn test_parse_fail() -> std::result::Result<(), Box<dyn std::error::Error>> {
-        let g = Grammar::new_from_file(&test_file_path("grammars/adventure.cfg"))?;
+        let g = Grammar::new_from_file(&test_file_path("grammars/lr_simple_expr.cfg"))?;
         let parser = new_simple(&g)?;
 
-        assert_error_text(parser.parse(""), "empty input");
-        assert_error_text(
-            parser.parse("^"),
-            "parse error: unrecognized input character '^'",
+        assert!(matches!(parser.parse(""), Err(Error::EmptyInput)));
+
+        assert_parse_error(parser.parse("^"), "unrecognized input character '^'");
+
+        assert_parse_error(
+            parser.parse("a+b(c)"),
+            "no parser action for input character '('",
         );
 
         Ok(())
