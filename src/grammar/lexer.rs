@@ -168,15 +168,16 @@ impl Lexer {
         }
     }
 
-    /// Lexes a non-terminal, which is any sequence of alphabetic characters,
-    /// except a sequence beginning with any of the alphabetic characters we're
-    /// accepting as an empty production body
+    /// Lexes a non-terminal, which is an alphabetic character (excluding any
+    /// of the alphabetic characters we're accepting as an empty production
+    /// body) followed by any number of alphabetic characters, underscores, or
+    /// primes (').
     fn lex_non_terminal(&mut self, symbol_table: &mut SymbolTable) -> Result<Option<TokenInfo>> {
         let initial = self.read();
         let mut non_terminal = vec![initial.value];
 
         while let Some(lookahead) = self.lookahead() {
-            if !lookahead.is_alphabetic() {
+            if !(lookahead.is_alphabetic() || lookahead == '_' || lookahead == '\'') {
                 break;
             }
             non_terminal.push(self.read().value);
@@ -433,7 +434,7 @@ mod test {
         assert_eq!(table.len(), 3);
         assert_eq!(table.non_terminal_value(0), "E");
         assert_eq!(table.non_terminal_value(1), "T");
-        assert_eq!(table.non_terminal_value(2), "Er");
+        assert_eq!(table.non_terminal_value(2), "E'");
 
         Ok(())
     }

@@ -686,42 +686,42 @@ mod test {
                 production: 1,
                 dot: 0
             }),
-            "Er → ·'+' T Er"
+            "E' → ·'+' T E'"
         );
         assert_eq!(
             g.format_item(Item {
                 production: 1,
                 dot: 1
             }),
-            "Er → '+'·T Er"
+            "E' → '+'·T E'"
         );
         assert_eq!(
             g.format_item(Item {
                 production: 1,
                 dot: 2
             }),
-            "Er → '+' T·Er"
+            "E' → '+' T·E'"
         );
         assert_eq!(
             g.format_item(Item {
                 production: 1,
                 dot: 3
             }),
-            "Er → '+' T Er·"
+            "E' → '+' T E'·"
         );
         assert_eq!(
             g.format_item(Item {
                 production: 5,
                 dot: 0
             }),
-            "Tr → ·"
+            "T' → ·"
         );
         assert_eq!(
             g.format_item(Item {
                 production: 5,
                 dot: 1
             }),
-            "Tr → ·"
+            "T' → ·"
         );
 
         Ok(())
@@ -737,7 +737,7 @@ mod test {
                 dot: 0,
                 lookahead: InputSymbol::Character('c')
             }),
-            "Er → ·'+' T Er, 'c'"
+            "E' → ·'+' T E', 'c'"
         );
         assert_eq!(
             g.format_lritem(LRItem {
@@ -745,7 +745,7 @@ mod test {
                 dot: 1,
                 lookahead: InputSymbol::EndOfInput
             }),
-            "Er → '+'·T Er, $"
+            "E' → '+'·T E', $"
         );
 
         Ok(())
@@ -755,17 +755,17 @@ mod test {
     fn test_format_production() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let g = Grammar::new_from_file(&test_file_path("grammars/nlr_simple_expr.cfg"))?;
 
-        assert_eq!(g.format_production(0), "E → T Er");
-        assert_eq!(g.format_production(1), "Er → '+' T Er");
-        assert_eq!(g.format_production(2), "Er → ϵ");
-        assert_eq!(g.format_production(3), "T → F Tr");
-        assert_eq!(g.format_production(4), "Tr → '*' F Tr");
-        assert_eq!(g.format_production(5), "Tr → ϵ");
+        assert_eq!(g.format_production(0), "E → T E'");
+        assert_eq!(g.format_production(1), "E' → '+' T E'");
+        assert_eq!(g.format_production(2), "E' → ϵ");
+        assert_eq!(g.format_production(3), "T → F T'");
+        assert_eq!(g.format_production(4), "T' → '*' F T'");
+        assert_eq!(g.format_production(5), "T' → ϵ");
         assert_eq!(g.format_production(6), "F → '(' E ')'");
         assert_eq!(g.format_production(7), "F → ID");
-        assert_eq!(g.format_production(8), "ID → letter IDr");
-        assert_eq!(g.format_production(9), "IDr → ID");
-        assert_eq!(g.format_production(10), "IDr → ϵ");
+        assert_eq!(g.format_production(8), "ID → letter ID'");
+        assert_eq!(g.format_production(9), "ID' → ID");
+        assert_eq!(g.format_production(10), "ID' → ϵ");
         assert_eq!(g.format_production(11), "letter → 'a'");
 
         Ok(())
@@ -860,15 +860,15 @@ mod test {
 
         assert_eq!(g.productions_for_non_terminal(0), vec![0]); // E
         assert_eq!(g.productions_for_non_terminal(1), vec![3]); // T
-        assert_eq!(g.productions_for_non_terminal(2), vec![1, 2]); // Er
+        assert_eq!(g.productions_for_non_terminal(2), vec![1, 2]); // E'
         assert_eq!(g.productions_for_non_terminal(4), vec![6, 7]); // F
-        assert_eq!(g.productions_for_non_terminal(5), vec![4, 5]); // Tr
+        assert_eq!(g.productions_for_non_terminal(5), vec![4, 5]); // T'
         assert_eq!(g.productions_for_non_terminal(9), vec![8]); // ID
         assert_eq!(
             g.productions_for_non_terminal(10),
             (11..37).collect::<Vec<usize>>()
         ); // letter
-        assert_eq!(g.productions_for_non_terminal(11), vec![9, 10]); // IDr
+        assert_eq!(g.productions_for_non_terminal(11), vec![9, 10]); // ID'
 
         Ok(())
     }

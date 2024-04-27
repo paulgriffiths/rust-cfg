@@ -156,9 +156,9 @@ mod test {
         assert_eq!(
             tree.visualize(&g),
             concat!(
-                "E→[E→[T→[F→[ID→[letter→['a'] IDr→[ϵ]]]]] ",
-                "'+' T→[T→[F→[ID→[letter→['b'] IDr→[ϵ]]]] ",
-                "'*' F→[ID→[letter→['c'] IDr→[ϵ]]]]]"
+                "E→[E→[T→[F→[ID→[letter→['a'] ID'→[ϵ]]]]] ",
+                "'+' T→[T→[F→[ID→[letter→['b'] ID'→[ϵ]]]] ",
+                "'*' F→[ID→[letter→['c'] ID'→[ϵ]]]]]"
             )
         );
         Ok(())
@@ -174,9 +174,9 @@ mod test {
         assert_eq!(
             tree.visualize(&g),
             concat!(
-                "E→[E→[T→[F→[ID→[letter→['a'] IDr→[ϵ]]]]] ",
-                "'+' T→[T→[F→[ID→[letter→['b'] IDr→[ϵ]]]] ",
-                "'*' F→[ID→[letter→['c'] IDr→[ϵ]]]]]"
+                "E→[E→[T→[F→[ID→[letter→['a'] ID'→[ϵ]]]]] ",
+                "'+' T→[T→[F→[ID→[letter→['b'] ID'→[ϵ]]]] ",
+                "'*' F→[ID→[letter→['c'] ID'→[ϵ]]]]]"
             )
         );
         Ok(())

@@ -12,10 +12,10 @@ fn test_parser() -> std::result::Result<(), Box<dyn std::error::Error>> {
     assert_eq!(
         tree.visualize(&g),
         concat!(
-            "E→[T→[T→[F→['(' E→[E→[T→[F→[ID→[letter→['a'] IDr→[ϵ]]]]] ",
-            "'+' T→[F→[ID→[letter→['b'] IDr→[ϵ]]]]] ')']] '*' ",
-            "F→[ID→[letter→['c'] IDr→[ID→[letter→['h'] IDr→[ID→[letter→['a'] IDr→[ID→[letter→['r'] ",
-            "IDr→[ID→[letter→['l'] IDr→[ID→[letter→['i'] IDr→[ID→[letter→['e'] IDr→[ϵ]]]]]]]]]]]]]]]]]"
+            "E→[T→[T→[F→['(' E→[E→[T→[F→[ID→[letter→['a'] ID'→[ϵ]]]]] ",
+            "'+' T→[F→[ID→[letter→['b'] ID'→[ϵ]]]]] ')']] '*' ",
+            "F→[ID→[letter→['c'] ID'→[ID→[letter→['h'] ID'→[ID→[letter→['a'] ID'→[ID→[letter→['r'] ",
+            "ID'→[ID→[letter→['l'] ID'→[ID→[letter→['i'] ID'→[ID→[letter→['e'] ID'→[ϵ]]]]]]]]]]]]]]]]]"
         )
     );
 

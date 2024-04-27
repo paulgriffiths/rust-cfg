@@ -11,14 +11,14 @@ fn test_parser() -> std::result::Result<(), Box<dyn std::error::Error>> {
     assert_eq!(tree.frontier(), "GO WEST");
     assert_eq!(
         tree.visualize(&g),
-        "action→[move→['G' 'O' ws→[' ' wsr→[ϵ]] direction→['W' 'E' 'S' 'T']]]"
+        "action→[move→['G' 'O' ws→[' ' ws'→[ϵ]] direction→['W' 'E' 'S' 'T']]]"
     );
 
     let tree = parser.parse("LOOK NORTH")?;
     assert_eq!(tree.frontier(), "LOOK NORTH");
     assert_eq!(
         tree.visualize(&g),
-        "action→[look→['L' 'O' 'O' 'K' ws→[' ' wsr→[ϵ]] direction→['N' 'O' 'R' 'T' 'H']]]"
+        "action→[look→['L' 'O' 'O' 'K' ws→[' ' ws'→[ϵ]] direction→['N' 'O' 'R' 'T' 'H']]]"
     );
 
     let tree = parser.parse("FLING SWORD")?;
@@ -26,7 +26,7 @@ fn test_parser() -> std::result::Result<(), Box<dyn std::error::Error>> {
     assert_eq!(
         tree.visualize(&g),
         concat!(
-            "action→[throw→['F' 'L' 'I' 'N' 'G' ws→[' ' wsr→[ϵ]] ",
+            "action→[throw→['F' 'L' 'I' 'N' 'G' ws→[' ' ws'→[ϵ]] ",
             "object→['S' 'W' 'O' 'R' 'D'] towards→[ϵ]]]"
         )
     );
@@ -36,9 +36,9 @@ fn test_parser() -> std::result::Result<(), Box<dyn std::error::Error>> {
     assert_eq!(
         tree.visualize(&g),
         concat!(
-            "action→[throw→['F' 'L' 'I' 'N' 'G' ws→[' ' wsr→[ϵ]] ",
+            "action→[throw→['F' 'L' 'I' 'N' 'G' ws→[' ' ws'→[ϵ]] ",
             "object→['T' 'H' 'O' 'R' 'I' 'N'] ",
-            "towards→[ws→[' ' wsr→[ws→[' ' wsr→[ws→[' ' wsr→[ws→[' ' wsr→[ϵ]]]]]]]] 'A' 'T' ws→[' ' wsr→[ϵ]] ",
+            "towards→[ws→[' ' ws'→[ws→[' ' ws'→[ws→[' ' ws'→[ws→[' ' ws'→[ϵ]]]]]]]] 'A' 'T' ws→[' ' ws'→[ϵ]] ",
             "creature→['G' 'O' 'B' 'L' 'I' 'N']]]]"
         )
     );
@@ -48,7 +48,7 @@ fn test_parser() -> std::result::Result<(), Box<dyn std::error::Error>> {
     assert_eq!(
         tree.visualize(&g),
         concat!(
-            "action→[take→['T' 'A' 'K' 'E' ws→[' ' wsr→[ϵ]] ",
+            "action→[take→['T' 'A' 'K' 'E' ws→[' ' ws'→[ϵ]] ",
             "object→['L' 'A' 'N' 'T' 'E' 'R' 'N'] from→[ϵ]]]"
         )
     );
@@ -58,9 +58,9 @@ fn test_parser() -> std::result::Result<(), Box<dyn std::error::Error>> {
     assert_eq!(
         tree.visualize(&g),
         concat!(
-            "action→[take→['T' 'A' 'K' 'E' ws→[' ' wsr→[ϵ]] ",
+            "action→[take→['T' 'A' 'K' 'E' ws→[' ' ws'→[ϵ]] ",
             "object→['G' 'O' 'L' 'D'] ",
-            "from→[ws→[' ' wsr→[ϵ]] 'F' 'R' 'O' 'M' ws→[' ' wsr→[ϵ]] ",
+            "from→[ws→[' ' ws'→[ϵ]] 'F' 'R' 'O' 'M' ws→[' ' ws'→[ϵ]] ",
             "creature→['D' 'W' 'A' 'R' 'F']]]]",
         )
     );
