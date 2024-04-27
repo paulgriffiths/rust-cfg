@@ -14,6 +14,12 @@ pub struct Options {
 #[derive(Subcommand)]
 /// Commands for the cfg tool
 pub enum Commands {
+    /// Output the canonical collection of sets of LR items
+    CanonicalCollection {
+        #[arg(short, long)]
+        /// Output sets of LR(1) items (default is LR(0))
+        canonical: bool,
+    },
     /// Output a derivation of a sentence
     Derive {
         /// The sentence to derive
@@ -48,6 +54,6 @@ pub enum Commands {
         /// Indentation level
         indent: Option<usize>,
     },
-    /// Outputs a list of the productions in the grammar
+    /// Output a list of the productions in the grammar
     Productions,
 }

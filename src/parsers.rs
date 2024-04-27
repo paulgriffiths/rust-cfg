@@ -9,6 +9,8 @@ pub mod recursivedescent;
 pub mod simplelr;
 mod stack;
 use crate::grammar::{FirstItem, FollowItem};
+pub use items::Item;
+pub use lritems::LRItem;
 use std::cmp::{Ord, Ordering, PartialOrd};
 use std::convert::From;
 use std::fmt;

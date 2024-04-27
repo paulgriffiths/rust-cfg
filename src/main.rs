@@ -1,4 +1,5 @@
 use cfg::cli::args::{Commands, Options};
+use cfg::cli::collection;
 use cfg::cli::derive;
 use cfg::cli::first;
 use cfg::cli::follow;
@@ -13,6 +14,13 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let g = Grammar::new_from_file(&cli.grammar)?;
 
     match &cli.command {
+        Some(Commands::CanonicalCollection { canonical }) => {
+            if *canonical {
+                collection::output_canonical(&g);
+            } else {
+                collection::output(&g);
+            }
+        }
         Some(Commands::Derive { input, rightmost }) => {
             if *rightmost {
                 derive::output_right(&g, input)?;

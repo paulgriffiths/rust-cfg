@@ -5,6 +5,7 @@ mod parser;
 mod symboltable;
 mod token;
 use crate::errors::Result;
+use crate::parsers::{InputSymbol, Item, LRItem};
 pub use firstfollow::{FirstItem, FirstSet, FirstVector, FollowItem, FollowMap, FollowSet};
 use parser::NTProductionsMap;
 use std::collections::HashSet;
@@ -101,12 +102,12 @@ impl Grammar {
         let mut productions = self.productions.clone();
         let mut nt_productions = self.nt_productions.clone();
 
-        // Calculate a name for the new start symbol by beginning with 'Saug'
-        // and adding as many underscores as we need until we find a name which
-        // is not already in the symbol table
-        let mut name = String::from("Saug");
+        // Calculate a name for the new start symbol by adding a prime to the
+        // start symbol name, and adding as many additional primes as we need
+        // until we find a name which is not already in the symbol table
+        let mut name = format!("{}'", self.non_terminal_name(self.start()));
         while symbol_table.contains_non_terminal(&name) {
-            name.push('_');
+            name.push('\'');
         }
 
         // Add the new non-terminal and a new production
@@ -218,6 +219,54 @@ impl Grammar {
     /// Returns FOLLOW(nt)
     pub fn follow(&self, nt: usize) -> FollowSet {
         self.follows.get(&nt).unwrap().clone()
+    }
+
+    /// Returns a string representation of a simple LR item
+    pub fn format_item(&self, item: Item) -> String {
+        let production = &self.production(item.production);
+
+        let mut out = String::new();
+
+        for (i, s) in production.body.iter().enumerate() {
+            if item.dot == i {
+                if i == 0 {
+                    out.push_str(" ·");
+                } else {
+                    out.push('·');
+                }
+            } else {
+                out.push(' ');
+            }
+
+            match s {
+                Symbol::NonTerminal(id) => {
+                    out.push_str(self.non_terminal_name(*id).as_str());
+                }
+                Symbol::Terminal(id) => {
+                    out.push_str(format!("'{}'", &self.terminal_value(*id)).as_str());
+                }
+                Symbol::Empty => (),
+            }
+        }
+
+        if item.dot >= production.body.len() {
+            out.push('·');
+        }
+
+        format!("{} →{}", self.non_terminal_name(production.head), out,)
+    }
+
+    /// Returns a string representation of a canonical LR item
+    pub fn format_lritem(&self, item: LRItem) -> String {
+        let slr_item = self.format_item(Item {
+            production: item.production,
+            dot: item.dot,
+        });
+
+        match item.lookahead {
+            InputSymbol::Character(c) => format!("{}, '{}'", slr_item, c),
+            InputSymbol::EndOfInput => format!("{}, $", slr_item),
+        }
     }
 
     /// Returns a string representation of a production
@@ -541,7 +590,7 @@ mod test {
         assert_eq!(g.num_productions(), 3);
         assert_eq!(g.format_production(0), "S → S '(' S ')' S");
         assert_eq!(g.format_production(1), "S → ϵ");
-        assert_eq!(g.format_production(2), "Saug → S");
+        assert_eq!(g.format_production(2), "S' → S");
         assert_eq!(g.productions_for_non_terminal(0), vec![0, 1]);
         assert_eq!(g.productions_for_non_terminal(3), vec![2]);
         assert_eq!(
@@ -618,6 +667,80 @@ mod test {
             g.first_ids(&[1, 1, 3]),
             first_char_set(&['s', 'e', 'f', 'c'], false)
         ); // BBC
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_format_item() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let g = Grammar::new_from_file(&test_file_path("grammars/nlr_simple_expr.cfg"))?;
+
+        assert_eq!(
+            g.format_item(Item {
+                production: 1,
+                dot: 0
+            }),
+            "Er → ·'+' T Er"
+        );
+        assert_eq!(
+            g.format_item(Item {
+                production: 1,
+                dot: 1
+            }),
+            "Er → '+'·T Er"
+        );
+        assert_eq!(
+            g.format_item(Item {
+                production: 1,
+                dot: 2
+            }),
+            "Er → '+' T·Er"
+        );
+        assert_eq!(
+            g.format_item(Item {
+                production: 1,
+                dot: 3
+            }),
+            "Er → '+' T Er·"
+        );
+        assert_eq!(
+            g.format_item(Item {
+                production: 5,
+                dot: 0
+            }),
+            "Tr → ·"
+        );
+        assert_eq!(
+            g.format_item(Item {
+                production: 5,
+                dot: 1
+            }),
+            "Tr → ·"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_format_lritem() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let g = Grammar::new_from_file(&test_file_path("grammars/nlr_simple_expr.cfg"))?;
+
+        assert_eq!(
+            g.format_lritem(LRItem {
+                production: 1,
+                dot: 0,
+                lookahead: InputSymbol::Character('c')
+            }),
+            "Er → ·'+' T Er, 'c'"
+        );
+        assert_eq!(
+            g.format_lritem(LRItem {
+                production: 1,
+                dot: 1,
+                lookahead: InputSymbol::EndOfInput
+            }),
+            "Er → '+'·T Er, $"
+        );
 
         Ok(())
     }

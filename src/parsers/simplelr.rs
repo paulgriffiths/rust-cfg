@@ -14,8 +14,8 @@ pub struct ParseTable {
 
 /// A canonical collection of sets of LR(0) items for an augmented grammar,
 /// along with a calculated table of SHIFTs and GOTOs
-struct Collection {
-    collection: Vec<ItemSet>,
+pub struct Collection {
+    pub collection: Vec<ItemSet>,
     shifts_and_gotos: Vec<Vec<Option<usize>>>,
 }
 
@@ -171,7 +171,7 @@ impl ParseTable {
 
 /// Returns the canonical collection of sets of LR(0) items for the given
 /// augmented grammar
-fn canonical_collection(g: &Grammar) -> Collection {
+pub fn canonical_collection(g: &Grammar) -> Collection {
     // Algorithm adapted from Aho et al (2007) p.246
 
     let start_set = ItemSet::from([Item::new_production(
@@ -217,7 +217,17 @@ fn canonical_collection(g: &Grammar) -> Collection {
                 // collection, so we may as well save ourselves some work later
                 match symbol {
                     Symbol::Terminal(id) | Symbol::NonTerminal(id) => {
-                        shifts_and_gotos[i][*id] = Some(set_index);
+                        match shifts_and_gotos[i][*id] {
+                            None => {
+                                shifts_and_gotos[i][*id] = Some(set_index);
+                            }
+                            Some(i) if i == set_index => (),
+                            _ => {
+                                // We have a conflict
+                                // TODO: replace this with error
+                                panic!("conflict in shifts_and_gotos");
+                            }
+                        }
                     }
                     Symbol::Empty => {
                         panic!("ϵ found in grammar symbols");

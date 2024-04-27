@@ -14,8 +14,8 @@ pub struct ParseTable {
 
 /// A canonical collection of sets of LR(1) items for an augmented grammar,
 /// along with a calculated table of SHIFTs and GOTOs
-struct Collection {
-    collection: Vec<LRItemSet>,
+pub struct Collection {
+    pub collection: Vec<LRItemSet>,
     shifts_and_gotos: Vec<Vec<Option<usize>>>,
 }
 
@@ -172,7 +172,7 @@ impl ParseTable {
 
 /// Returns the canonical collection of sets of LR(1) items for the given
 /// augmented grammar
-fn canonical_collection(g: &Grammar) -> Collection {
+pub fn canonical_collection(g: &Grammar) -> Collection {
     // Algorithm adapted from Aho et al (2007) p.261
 
     let start_set = LRItemSet::from([LRItem::new_production(
