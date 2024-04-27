@@ -7,13 +7,28 @@ pub mod position;
 
 #[cfg(test)]
 mod test {
-    use crate::errors::Result;
+    use crate::errors::{Error, Result};
 
     /// Helper function to verify the text of an error
     pub fn assert_error_text<T>(result: Result<T>, want: &str) {
         match result {
             Err(e) => {
                 assert_eq!(e.to_string(), want);
+            }
+            Ok(_) => {
+                panic!("no error");
+            }
+        }
+    }
+
+    /// Helper function to verify the text of a ParseError
+    pub fn assert_parse_error<T>(result: Result<T>, want: &str) {
+        match result {
+            Err(Error::ParseError(s)) => {
+                assert_eq!(s.to_string(), want);
+            }
+            Err(e) => {
+                panic!("unexpected error: {}", e.to_string());
             }
             Ok(_) => {
                 panic!("no error");
