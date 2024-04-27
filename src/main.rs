@@ -4,6 +4,7 @@ use cfg::cli::first;
 use cfg::cli::follow;
 use cfg::cli::info;
 use cfg::cli::parsetree;
+use cfg::cli::productions;
 use cfg::grammar::Grammar;
 use clap::Parser as ClapParser;
 
@@ -35,6 +36,9 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                 2
             };
             parsetree::output(&g, input, indent)?;
+        }
+        Some(Commands::Productions) => {
+            productions::output(&g);
         }
         None => {
             panic!("no command");

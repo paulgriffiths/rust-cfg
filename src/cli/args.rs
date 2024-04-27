@@ -48,4 +48,6 @@ pub enum Commands {
         /// Indentation level
         indent: Option<usize>,
     },
+    /// Outputs a list of the productions in the grammar
+    Productions,
 }

@@ -2,6 +2,19 @@ use crate::grammar::{Grammar, Symbol};
 
 pub const LINE_LENGTH: usize = 72;
 
+pub fn longest_non_terminal_name(g: &Grammar) -> usize {
+    let mut max = 0;
+
+    for p in g.non_terminal_ids() {
+        let nt_len = g.non_terminal_name(*p).len();
+        if nt_len > max {
+            max = nt_len;
+        }
+    }
+
+    max
+}
+
 pub fn parse_non_terminal(g: &Grammar, nt: &str) -> usize {
     let Some(i) = g.maybe_non_terminal_index(nt) else {
         eprintln!("Unrecognized non-terminal '{}'", nt);

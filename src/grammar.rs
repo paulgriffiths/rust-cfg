@@ -221,10 +221,21 @@ impl Grammar {
     }
 
     /// Returns a string representation of a production
-    pub fn format_production(&self, nt: usize) -> String {
-        let production = &self.production(nt);
+    pub fn format_production(&self, p: usize) -> String {
+        let production = &self.production(p);
 
-        let mut out = format!("{} →", self.non_terminal_name(production.head));
+        format!(
+            "{} → {}",
+            self.non_terminal_name(production.head),
+            self.format_production_body(p)
+        )
+    }
+
+    /// Returns a string representation of a production body
+    pub fn format_production_body(&self, p: usize) -> String {
+        let production = &self.production(p);
+
+        let mut out = String::new();
 
         for s in &production.body {
             match s {
@@ -240,7 +251,7 @@ impl Grammar {
             }
         }
 
-        out
+        out.trim().to_string()
     }
 
     /// Returns a string representation of a string of grammar symbols
