@@ -135,7 +135,7 @@ impl<T: PTable> Parser<T> {
             } else {
                 panic!("failed to get GOTO");
             },
-            tree.add(Node {
+            tree.add_root(Node {
                 production: id,
                 children: Vec::from(children),
             }),

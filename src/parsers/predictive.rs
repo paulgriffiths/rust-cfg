@@ -2,9 +2,12 @@ use super::InputSymbol;
 use crate::errors::{Error, Result};
 use crate::grammar::Grammar;
 use std::collections::{hash_map, HashMap};
+mod iterative;
 mod recursive;
+mod stack;
 
 // Recursive parser is the default predictive parser implementation
+pub use iterative::Parser as IterativeParser;
 pub use recursive::Parser;
 
 type TableEntry = HashMap<InputSymbol, usize>;

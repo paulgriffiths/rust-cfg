@@ -81,7 +81,7 @@ impl<'p> Parser<'p> {
         // There's nothing to do for an ϵ-production except return the parse
         // tree node
         if production.is_e() {
-            return Ok(Child::NonTerminal(tree.add(Node {
+            return Ok(Child::NonTerminal(tree.add_root(Node {
                 production: id,
                 children: vec![Child::Empty],
             })));
@@ -106,7 +106,7 @@ impl<'p> Parser<'p> {
             }
         }
 
-        Ok(Child::NonTerminal(tree.add(Node {
+        Ok(Child::NonTerminal(tree.add_root(Node {
             production: id,
             children,
         })))

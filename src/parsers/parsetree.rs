@@ -7,12 +7,14 @@ pub struct Tree {
     stack: Vec<Option<usize>>,
 }
 
+#[derive(Debug, Eq, PartialEq, Clone)]
 /// A node in a parse tree
 pub struct Node {
     pub production: usize,
     pub children: Vec<Child>,
 }
 
+#[derive(Debug, Eq, PartialEq, Clone, Copy)]
 /// A child of a parse tree node
 pub enum Child {
     NonTerminal(usize),
@@ -36,8 +38,32 @@ impl Tree {
         }
     }
 
-    /// Adds a new root node to the tree and returns its ID
-    pub fn add(&mut self, n: Node) -> usize {
+    /// Appends a new child to the given node
+    pub fn add_child(&mut self, n: usize, child: Child) {
+        let mut node = self.nodes[n].to_owned();
+        node.children.push(child);
+        self.nodes[n] = node;
+    }
+
+    /// Adds a new node to the tree for the given production and returns its
+    /// ID. If the tree has no root node, the new node is added as the root.
+    /// The node is added with no children, so this method is useful for
+    /// building a tree from the top down.
+    pub fn add_node(&mut self, p: usize) -> usize {
+        let id = self.nodes.len();
+        if self.root.is_none() {
+            self.root = Some(id);
+        }
+        self.nodes.push(Node {
+            production: p,
+            children: Vec::new(),
+        });
+        id
+    }
+
+    /// Adds a new root node to the tree and returns its ID. This method is
+    /// useful for building a tree from the bottom up.
+    pub fn add_root(&mut self, n: Node) -> usize {
         let new_root = self.nodes.len();
         self.root = Some(new_root);
         self.nodes.push(n);
@@ -333,15 +359,15 @@ mod test {
     fn test_frontier() {
         let mut tree: Tree = Default::default();
 
-        let n1 = tree.add(Node {
+        let n1 = tree.add_root(Node {
             production: 0,
             children: vec![Child::Terminal('3')],
         });
-        let n2 = tree.add(Node {
+        let n2 = tree.add_root(Node {
             production: 0,
             children: vec![Child::Terminal('4')],
         });
-        let n3 = tree.add(Node {
+        let n3 = tree.add_root(Node {
             production: 1,
             children: vec![
                 Child::NonTerminal(n1),
@@ -352,11 +378,11 @@ mod test {
 
         tree.save();
 
-        let n4 = tree.add(Node {
+        let n4 = tree.add_root(Node {
             production: 0,
             children: vec![Child::Terminal('5')],
         });
-        let n5 = tree.add(Node {
+        let n5 = tree.add_root(Node {
             production: 2,
             children: vec![
                 Child::NonTerminal(n4),
@@ -364,7 +390,7 @@ mod test {
                 Child::NonTerminal(n3),
             ],
         });
-        tree.add(Node {
+        tree.add_root(Node {
             production: 3,
             children: vec![Child::NonTerminal(n5)],
         });
@@ -374,5 +400,33 @@ mod test {
         tree.restore();
 
         assert_eq!(tree.frontier(), "3*4");
+    }
+
+    #[test]
+    fn test_build_bottom_up() {
+        let mut tree = Tree::new();
+
+        let root = tree.add_node(3);
+        let t1 = tree.add_node(0);
+        let t2 = tree.add_node(0);
+        let mult = tree.add_node(1);
+        let t3 = tree.add_node(0);
+        let add = tree.add_node(2);
+
+        tree.add_child(t1, Child::Terminal('3'));
+        tree.add_child(t2, Child::Terminal('4'));
+        tree.add_child(t3, Child::Terminal('5'));
+
+        tree.add_child(mult, Child::NonTerminal(t1));
+        tree.add_child(mult, Child::Terminal('*'));
+        tree.add_child(mult, Child::NonTerminal(t2));
+
+        tree.add_child(add, Child::NonTerminal(t3));
+        tree.add_child(add, Child::Terminal('+'));
+        tree.add_child(add, Child::NonTerminal(mult));
+
+        tree.add_child(root, Child::NonTerminal(add));
+
+        assert_eq!(tree.frontier(), "5+3*4");
     }
 }
