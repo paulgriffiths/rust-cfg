@@ -96,8 +96,8 @@ impl Grammar {
         Ok(Grammar::new(&std::fs::read_to_string(path)?)?)
     }
 
-    /// Returns an augmented grammar, with a new start symbol Saug and a new
-    /// production Saug → S, where S is the previous start symbol
+    /// Returns an augmented grammar, with a new start symbol S' and a new
+    /// production S' → S, where S is the previous start symbol
     pub fn augment(&self) -> Grammar {
         let mut symbol_table = self.symbol_table.deep_copy();
         let mut productions = self.productions.clone();
@@ -244,7 +244,7 @@ impl Grammar {
                     out.push_str(self.non_terminal_name(*id).as_str());
                 }
                 Symbol::Terminal(id) => {
-                    out.push_str(format!("'{}'", &self.terminal_string(*id)).as_str());
+                    out.push_str(format!("'{}'", self.terminal_string(*id)).as_str());
                 }
                 Symbol::Empty => (),
             }
@@ -254,7 +254,7 @@ impl Grammar {
             out.push('·');
         }
 
-        format!("{} →{}", self.non_terminal_name(production.head), out,)
+        format!("{} →{}", self.non_terminal_name(production.head), out)
     }
 
     /// Returns a string representation of a canonical LR item
@@ -290,10 +290,10 @@ impl Grammar {
         for s in &production.body {
             match s {
                 Symbol::NonTerminal(id) => {
-                    out.push_str(format!(" {}", &self.non_terminal_name(*id)).as_str());
+                    out.push_str(format!(" {}", self.non_terminal_name(*id)).as_str());
                 }
                 Symbol::Terminal(id) => {
-                    out.push_str(format!(" '{}'", &self.terminal_string(*id)).as_str());
+                    out.push_str(format!(" '{}'", self.terminal_string(*id)).as_str());
                 }
                 Symbol::Empty => {
                     out.push_str(" ϵ");
