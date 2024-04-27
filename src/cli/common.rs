@@ -49,6 +49,7 @@ pub fn parse_grammar_symbols(g: &Grammar, s: &str) -> Vec<Symbol> {
                 c[1]
             } else {
                 match c[2] {
+                    '\\' => '\\',
                     'n' => '\n',
                     'r' => '\r',
                     't' => '\t',
@@ -84,7 +85,7 @@ mod test {
     use crate::test::test_file_path;
 
     #[test]
-    fn test_start() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    fn test_parse_grammar_symbols() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let g = Grammar::new_from_file(&test_file_path("grammars/nlr_simple_expr.cfg"))?;
         let want = vec![
             Symbol::NonTerminal(0),
