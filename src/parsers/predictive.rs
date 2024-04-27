@@ -3,10 +3,69 @@ use super::reader::Reader;
 use super::InputSymbol;
 use crate::errors::{Error, Result};
 use crate::grammar::{Grammar, Symbol};
-use std::collections::hash_map;
+use std::collections::{hash_map, HashMap};
 
-type TableEntry = std::collections::HashMap<InputSymbol, usize>;
-type ParseTable = std::collections::HashMap<usize, TableEntry>;
+type TableEntry = HashMap<InputSymbol, usize>;
+
+/// A predictive parsing table
+pub struct ParseTable {
+    entries: HashMap<usize, TableEntry>,
+}
+
+impl ParseTable {
+    pub fn new(g: &Grammar) -> Result<ParseTable> {
+        // Algorithm adapted from Aho et al (2007) pp.224-225
+
+        let mut table = ParseTable {
+            entries: HashMap::new(),
+        };
+        for nt in g.non_terminal_ids() {
+            table.entries.insert(*nt, TableEntry::new());
+        }
+
+        for i in 0..g.num_productions() {
+            let head = g.production(i).head;
+
+            // For each terminal a in FIRST(body), add the production to
+            // table[head, a]
+            let (first, contains_e) = g.first_production(i, false);
+            for s in first {
+                table.insert(head, i, InputSymbol::from(s))?;
+            }
+
+            // If FIRST(body) contains ϵ, for each terminal or end-of-input
+            // marker b in FOLLOW(head), add the production to table[head, a]
+            if contains_e {
+                let follow = g.follow(head);
+                for s in follow {
+                    table.insert(head, i, InputSymbol::from(s))?;
+                }
+            }
+        }
+
+        Ok(table)
+    }
+
+    /// Inserts an entry into the parsing table
+    fn insert(&mut self, src: usize, dst: usize, s: InputSymbol) -> Result<()> {
+        match self.entries.get_mut(&src).unwrap().entry(s) {
+            hash_map::Entry::Occupied(_) => {
+                // We verify the grammar is LL(1) so we shouldn't get any
+                // collisions, but verify just in case
+                return Err(Error::GrammarNotLL1);
+            }
+            hash_map::Entry::Vacant(v) => {
+                v.insert(dst);
+            }
+        }
+
+        Ok(())
+    }
+
+    fn get(&self, nt: usize, s: InputSymbol) -> Option<usize> {
+        self.entries.get(&nt).unwrap().get(&s).copied()
+    }
+}
 
 /// A top-down predictive parser for LL(1) context-free grammars
 pub struct Parser<'p> {
@@ -22,46 +81,15 @@ impl<'p> Parser<'p> {
             return Err(Error::GrammarNotLL1);
         }
 
-        let mut table: ParseTable = ParseTable::new();
-        for nt in grammar.non_terminal_ids() {
-            table.insert(*nt, TableEntry::new());
-        }
-
-        let mut parser = Parser { grammar, table };
-
-        parser.build_parse_table();
-
-        Ok(parser)
-    }
-
-    /// Builds the predictive parsing table
-    fn build_parse_table(&mut self) {
-        // Algorithm adapted from Aho et al (2007) pp.224-225
-
-        for i in 0..self.grammar.num_productions() {
-            let head = self.grammar.production(i).head;
-
-            // For each terminal a in FIRST(body), add the production to
-            // table[head, a]
-            let (first, contains_e) = self.grammar.first_production(i, false);
-            for s in first {
-                self.insert_entry(head, i, InputSymbol::from(s));
-            }
-
-            // If FIRST(body) contains ϵ, for each terminal or end-of-input
-            // marker b in FOLLOW(head), add the production to table[head, a]
-            if contains_e {
-                let follow = self.grammar.follow(head);
-                for s in follow {
-                    self.insert_entry(head, i, InputSymbol::from(s));
-                }
-            }
-        }
+        Ok(Parser {
+            grammar,
+            table: ParseTable::new(grammar)?,
+        })
     }
 
     /// Chooses a production for a non-terminal based on the next input symbol
     fn choose_production(&self, nt: usize, s: InputSymbol) -> Result<usize> {
-        let Some(p) = self.table.get(&nt).unwrap().get(&s) else {
+        let Some(p) = self.table.get(nt, s) else {
             return Err(Error::ParseError(format!(
                 "failed to get production for non-terminal {}({}) for input symbol {:?}",
                 self.grammar.non_terminal_name(nt),
@@ -70,21 +98,7 @@ impl<'p> Parser<'p> {
             )));
         };
 
-        Ok(*p)
-    }
-
-    /// Inserts an entry into the parsing table
-    fn insert_entry(&mut self, src: usize, dst: usize, s: InputSymbol) {
-        match self.table.get_mut(&src).unwrap().entry(s) {
-            hash_map::Entry::Occupied(_) => {
-                // We verify the grammar is LL(1) so we shouldn't get any
-                // collisions, but verify just in case
-                panic!("table entry already set");
-            }
-            hash_map::Entry::Vacant(v) => {
-                v.insert(dst);
-            }
-        }
+        Ok(p)
     }
 
     /// Parses an input string
