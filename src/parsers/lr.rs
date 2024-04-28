@@ -1,7 +1,7 @@
-use super::canonicallr::ParseTable as CanonicalLRParseTable;
+use super::clr::ParseTable as CanonicalLRParseTable;
 use super::parsetree::{Child, Node, Tree};
 use super::reader::Reader;
-use super::simplelr::ParseTable as SimpleLRParseTable;
+use super::slr::ParseTable as SimpleLRParseTable;
 use super::stack::{Stack, StackValue};
 use super::InputSymbol;
 use crate::errors::{Error, Result};

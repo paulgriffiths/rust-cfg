@@ -4,7 +4,7 @@ use crate::grammar::Grammar;
 use crate::parsers::lr;
 use crate::parsers::lr::Parser;
 use crate::parsers::parsetree::{Child, Node, Tree};
-use crate::parsers::simplelr::ParseTable;
+use crate::parsers::slr::ParseTable;
 
 static GRAMMAR_TEXT: &str = "
 # Addition, subtraction, multiplication and division are left-associative

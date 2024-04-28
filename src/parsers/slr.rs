@@ -375,7 +375,7 @@ mod test {
     fn test_parse_table() -> std::result::Result<(), Box<dyn std::error::Error>> {
         // Grammar taken from Aho et al (2007) p.244, test cases from p.252
 
-        let g = Grammar::new_from_file(&test_file_path("grammars/simplelr/expr_aug.cfg"))?;
+        let g = Grammar::new_from_file(&test_file_path("grammars/slr/expr_aug.cfg"))?;
         let table = ParseTable::new(g)?;
 
         assert_eq!(table.actions[0][1], TableEntry::Goto(1)); // E
@@ -685,7 +685,7 @@ mod test {
     fn test_canonical_collection() -> std::result::Result<(), Box<dyn std::error::Error>> {
         // Grammar and test cases taken from Aho et al (2007) p.244
 
-        let g = Grammar::new_from_file(&test_file_path("grammars/simplelr/expr_aug.cfg"))?;
+        let g = Grammar::new_from_file(&test_file_path("grammars/slr/expr_aug.cfg"))?;
 
         let c = canonical_collection(&g);
         assert_eq!(c.collection.len(), 12);

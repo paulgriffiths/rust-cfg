@@ -1,12 +1,12 @@
 use crate::grammar::Grammar;
-use crate::parsers::canonicallr;
-use crate::parsers::simplelr;
+use crate::parsers::clr;
+use crate::parsers::slr;
 use crate::parsers::InputSymbol;
 
 /// Outputs the canonical collection of simple LR items
 pub fn output(g: &Grammar) {
     let g = g.augment();
-    let collection = simplelr::canonical_collection(&g).collection;
+    let collection = slr::canonical_collection(&g).collection;
     let collection_len = collection.len();
 
     for (i, set) in collection.into_iter().enumerate() {
@@ -59,7 +59,7 @@ pub fn output(g: &Grammar) {
 /// Outputs the canonical collection of canonical LR items
 pub fn output_canonical(g: &Grammar) {
     let g = g.augment();
-    let collection = canonicallr::canonical_collection(&g).collection;
+    let collection = clr::canonical_collection(&g).collection;
     let collection_len = collection.len();
 
     for (i, set) in collection.into_iter().enumerate() {

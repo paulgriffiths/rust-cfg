@@ -1,12 +1,12 @@
-pub mod canonicallr;
+pub mod clr;
 mod items;
 pub mod lr;
 mod lritems;
 pub mod parsetree;
 pub mod predictive;
+pub mod rd;
 mod reader;
-pub mod recursivedescent;
-pub mod simplelr;
+pub mod slr;
 mod stack;
 use crate::grammar::{FirstItem, FollowItem};
 pub use items::Item;
