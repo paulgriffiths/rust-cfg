@@ -91,7 +91,7 @@ impl ParseTable {
         // Return an error if the table entry is already set
         match self.actions[from][t] {
             TableEntry::Reduce(p) => {
-                return Err(Error::GrammarNotLR0(format!(
+                return Err(Error::GrammarNotSLR1(format!(
                     concat!(
                         "conflict between shift({}) and reduce({}) ",
                         "for state {} on input character '{}'"
@@ -103,7 +103,7 @@ impl ParseTable {
                 )));
             }
             TableEntry::Accept => {
-                return Err(Error::GrammarNotLR0(format!(
+                return Err(Error::GrammarNotSLR1(format!(
                     "conflict between shift({}) and accept for state {} on input character '{}'",
                     to,
                     from,
@@ -156,7 +156,7 @@ impl ParseTable {
             // Return an error if the table entry is already set
             match self.actions[from][i] {
                 TableEntry::Accept => {
-                    return Err(Error::GrammarNotLR0(format!(
+                    return Err(Error::GrammarNotSLR1(format!(
                         concat!(
                             "conflict between reduce({}) and accept ",
                             "for state {} on input character '{}'"
@@ -167,7 +167,7 @@ impl ParseTable {
                     )));
                 }
                 TableEntry::Reduce(r) => {
-                    return Err(Error::GrammarNotLR0(format!(
+                    return Err(Error::GrammarNotSLR1(format!(
                         concat!(
                             "conflict between reduce({}) and reduce({}) ",
                             "for state {} on input character '{}'"
@@ -179,7 +179,7 @@ impl ParseTable {
                     )));
                 }
                 TableEntry::Shift(s) => {
-                    return Err(Error::GrammarNotLR0(format!(
+                    return Err(Error::GrammarNotSLR1(format!(
                         concat!(
                             "conflict between shift({}) and reduce({}) ",
                             "for state {} on input character '{}'"
@@ -815,7 +815,7 @@ mod test {
     #[test]
     fn test_parse_table_not_lr_zero() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let g = Grammar::new_from_file(&test_file_path("grammars/balanced_parentheses.cfg"))?;
-        assert!(matches!(ParseTable::new(g), Err(Error::GrammarNotLR0(_))));
+        assert!(matches!(ParseTable::new(g), Err(Error::GrammarNotSLR1(_))));
 
         Ok(())
     }
