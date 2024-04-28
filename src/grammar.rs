@@ -565,7 +565,7 @@ mod test {
     use crate::test::test_file_path;
 
     #[test]
-    fn test_aug() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    fn test_augment() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let g = Grammar::new_from_file(&test_file_path("grammars/balanced_parentheses.cfg"))?;
         assert_eq!(g.start(), 0);
         assert_eq!(g.num_productions(), 2);

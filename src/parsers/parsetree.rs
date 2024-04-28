@@ -1,4 +1,5 @@
 use crate::grammar::{Grammar, Symbol};
+use crate::utils;
 
 /// A parse tree
 pub struct Tree {
@@ -225,7 +226,7 @@ impl Tree {
                         traverse(tree, *next, g, s);
                     }
                     Child::Terminal(value) => {
-                        s.push_str(format!("'{}'", value).as_str());
+                        s.push_str(format!("'{}'", utils::format_char(*value)).as_str());
                     }
                     Child::Empty => {
                         s.push('ϵ');
@@ -270,7 +271,7 @@ impl Tree {
                         traverse(tree, *next, s);
                     }
                     Child::Terminal(value) => {
-                        s.push(*value);
+                        s.push_str(utils::format_char(*value).as_str());
                     }
                     Child::Empty => (),
                 }

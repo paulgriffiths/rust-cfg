@@ -52,11 +52,9 @@ impl ParseTable {
 
         // Add previously calculated GOTOs for non-terminals
         for state in 0..collection.shifts_and_gotos.len() {
-            for i in 0..collection.shifts_and_gotos[state].len() {
-                if let Symbol::NonTerminal(_) = table.grammar.symbols()[i] {
-                    if let Some(to) = collection.shifts_and_gotos[state][i] {
-                        table.actions[state][i] = TableEntry::Goto(to);
-                    }
+            for &i in table.grammar.non_terminal_ids() {
+                if let Some(to) = collection.shifts_and_gotos[state][i] {
+                    table.actions[state][i] = TableEntry::Goto(to);
                 }
             }
         }
@@ -69,7 +67,7 @@ impl ParseTable {
                 } else if let Symbol::Terminal(t) =
                     table.grammar.production(item.production).body[item.dot]
                 {
-                    // Retrieve previously calculated shift
+                    // Retrieve previously calculated SHIFT
                     table.add_shift(state, collection.shifts_and_gotos[state][t].unwrap(), t)?;
                 }
             }
@@ -80,8 +78,15 @@ impl ParseTable {
 
     /// Adds a SHIFT entry to the table for states from -> to on terminal t
     fn add_shift(&mut self, from: usize, to: usize, t: usize) -> Result<()> {
-        // Return an error if the table entry is already set
         match self.actions[from][t] {
+            TableEntry::Accept => {
+                return Err(Error::GrammarNotSLR1(format!(
+                    "conflict between shift({}) and accept for state {} on input character '{}'",
+                    to,
+                    from,
+                    self.grammar.terminal_value(t)
+                )));
+            }
             TableEntry::Reduce(p) => {
                 return Err(Error::GrammarNotSLR1(format!(
                     concat!(
@@ -90,14 +95,6 @@ impl ParseTable {
                     ),
                     to,
                     self.grammar.format_production(p),
-                    from,
-                    self.grammar.terminal_value(t)
-                )));
-            }
-            TableEntry::Accept => {
-                return Err(Error::GrammarNotSLR1(format!(
-                    "conflict between shift({}) and accept for state {} on input character '{}'",
-                    to,
                     from,
                     self.grammar.terminal_value(t)
                 )));
@@ -112,7 +109,8 @@ impl ParseTable {
                     self.grammar.terminal_value(t),
                 );
             }
-            // TODO: Can this happen?
+            // Shouldn't happen either, since the method of constructing the
+            // state sets renders SHIFT-SHIFT conflicts impossible
             TableEntry::Shift(_) => {
                 panic!(
                     "SHIFT already found from {} to {} on {}",
@@ -121,11 +119,11 @@ impl ParseTable {
                     self.grammar.terminal_value(t)
                 );
             }
-            // Table entry was not previously set, which is what we want
-            TableEntry::Error => (),
+            // Table entry was not previously set, so set it
+            TableEntry::Error => {
+                self.actions[from][t] = TableEntry::Shift(to);
+            }
         }
-
-        self.actions[from][t] = TableEntry::Shift(to);
 
         Ok(())
     }
@@ -190,17 +188,18 @@ impl ParseTable {
                         from, item
                     );
                 }
-                // Table entry was not previously set, which is what we want
-                TableEntry::Error => (),
+                // Table entry was not previously set, so set it
+                TableEntry::Error => {
+                    // Add ACCEPT to the table if the production head is the
+                    // (augmented) start symbol, otherwise add REDUCE
+                    self.actions[from][i] =
+                        if self.grammar.production(p).head == self.grammar.start() {
+                            TableEntry::Accept
+                        } else {
+                            TableEntry::Reduce(p)
+                        };
+                }
             }
-
-            // Add ACCEPT to the table if the production head is the (augmented)
-            // start symbol, otherwise add REDUCE
-            self.actions[from][i] = if self.grammar.production(p).head == self.grammar.start() {
-                TableEntry::Accept
-            } else {
-                TableEntry::Reduce(p)
-            };
         }
 
         Ok(())

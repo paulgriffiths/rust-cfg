@@ -53,11 +53,9 @@ impl ParseTable {
 
         // Add previously calculated GOTOs for non-terminals
         for state in 0..collection.shifts_and_gotos.len() {
-            for i in 0..collection.shifts_and_gotos[state].len() {
-                if let Symbol::NonTerminal(_) = table.grammar.symbols()[i] {
-                    if let Some(to) = collection.shifts_and_gotos[state][i] {
-                        table.actions[state][i] = TableEntry::Goto(to);
-                    }
+            for &i in table.grammar.non_terminal_ids() {
+                if let Some(to) = collection.shifts_and_gotos[state][i] {
+                    table.actions[state][i] = TableEntry::Goto(to);
                 }
             }
         }
@@ -70,7 +68,7 @@ impl ParseTable {
                 } else if let Symbol::Terminal(t) =
                     table.grammar.production(item.production).body[item.dot]
                 {
-                    // Retrieve previously calculated shift
+                    // Retrieve previously calculated SHIFT
                     table.add_shift(state, collection.shifts_and_gotos[state][t].unwrap(), t)?;
                 }
             }
@@ -81,8 +79,15 @@ impl ParseTable {
 
     /// Adds a SHIFT entry to the table for states from -> to on terminal t
     fn add_shift(&mut self, from: usize, to: usize, t: usize) -> Result<()> {
-        // Return an error if the table entry is already set
         match self.actions[from][t] {
+            TableEntry::Accept => {
+                return Err(Error::GrammarNotLR1(format!(
+                    "conflict between shift({}) and accept for state {} on input character '{}'",
+                    to,
+                    from,
+                    self.grammar.terminal_value(t)
+                )));
+            }
             TableEntry::Reduce(p) => {
                 return Err(Error::GrammarNotLR1(format!(
                     concat!(
@@ -91,14 +96,6 @@ impl ParseTable {
                     ),
                     to,
                     self.grammar.format_production(p),
-                    from,
-                    self.grammar.terminal_value(t)
-                )));
-            }
-            TableEntry::Accept => {
-                return Err(Error::GrammarNotLR1(format!(
-                    "conflict between shift({}) and accept for state {} on input character '{}'",
-                    to,
                     from,
                     self.grammar.terminal_value(t)
                 )));
@@ -113,7 +110,8 @@ impl ParseTable {
                     self.grammar.terminal_value(t),
                 );
             }
-            // TODO: Can this happen?
+            // Shouldn't happen either, since the method of constructing the
+            // state sets renders SHIFT-SHIFT conflicts impossible
             TableEntry::Shift(existing) => {
                 if existing != to {
                     panic!(
@@ -124,18 +122,18 @@ impl ParseTable {
                     );
                 }
             }
-            // Table entry was not previously set, which is what we want
-            TableEntry::Error => (),
+            // Table entry was not previously set, so set it
+            TableEntry::Error => {
+                self.actions[from][t] = TableEntry::Shift(to);
+            }
         }
-
-        self.actions[from][t] = TableEntry::Shift(to);
 
         Ok(())
     }
 
-    /// Adds a REDUCE production p entry for the given state to the table for
-    /// every element of FOLLOW(p). If p is for the augmented start symbol,
-    /// add an ACCEPT entry instead.
+    /// Adds a REDUCE production item.production entry for the given state to
+    /// the table for item. If item.production is for the augmented start
+    /// symbol, add an ACCEPT entry instead.
     fn add_reductions(&mut self, from: usize, item: &LRItem) -> Result<()> {
         // If [A → 𝛼·, a] is in Ii where i is not the start state, then set
         // ACTION[i, a] to "reduce A → 𝛼". If [S' → S·, $] is in Ii where S'
@@ -147,8 +145,18 @@ impl ParseTable {
             InputSymbol::EndOfInput => self.eof_index,
         };
 
-        // Return an error if the table entry is already set
         match self.actions[from][i] {
+            TableEntry::Accept => {
+                return Err(Error::GrammarNotLR1(format!(
+                    concat!(
+                        "conflict between reduce({}) and accept ",
+                        "for state {} on input character '{}'"
+                    ),
+                    self.grammar.format_production(item.production),
+                    from,
+                    item.lookahead,
+                )));
+            }
             TableEntry::Reduce(r) => {
                 return Err(Error::GrammarNotLR1(format!(
                     concat!(
@@ -161,17 +169,16 @@ impl ParseTable {
                     item.lookahead,
                 )));
             }
-            TableEntry::Accept => {
-                return Err(Error::GrammarNotLR1(format!(
-                    concat!(
-                        "conflict between reduce({}) and accept ",
-                        "for state {} on input character '{}'"
-                    ),
-                    self.grammar.format_production(item.production),
-                    from,
-                    item.lookahead,
-                )));
+            // Shouldn't happen, since GOTO is for non-terminals, and
+            // reductions are for terminals/end-of-input
+            TableEntry::Goto(_) => {
+                panic!(
+                    "conflict between SHIFT and GOTO from {} on {:?}",
+                    from, item.lookahead
+                );
             }
+            // Shouldn't happen either, since the method of constructing the
+            // state sets renders SHIFT-SHIFT conflicts impossible
             TableEntry::Shift(s) => {
                 return Err(Error::GrammarNotLR1(format!(
                     concat!(
@@ -184,26 +191,18 @@ impl ParseTable {
                     item.lookahead,
                 )));
             }
-            // Shouldn't happen, since GOTO is for non-terminals, and
-            // reductions are for terminals/end-of-input
-            TableEntry::Goto(_) => {
-                panic!(
-                    "conflict between SHIFT and GOTO from {} on {:?}",
-                    from, item.lookahead
-                );
+            // Table entry was not previously set, so set it
+            TableEntry::Error => {
+                // Add ACCEPT to the table if the production head is the
+                // (augmented) start symbol, otherwise add REDUCE
+                self.actions[from][i] =
+                    if self.grammar.production(item.production).head == self.grammar.start() {
+                        TableEntry::Accept
+                    } else {
+                        TableEntry::Reduce(item.production)
+                    };
             }
-            // Table entry was not previously set, which is what we want
-            TableEntry::Error => (),
         }
-
-        // Add ACCEPT to the table if the production head is the (augmented)
-        // start symbol, otherwise add REDUCE
-        self.actions[from][i] =
-            if self.grammar.production(item.production).head == self.grammar.start() {
-                TableEntry::Accept
-            } else {
-                TableEntry::Reduce(item.production)
-            };
 
         Ok(())
     }
@@ -222,7 +221,7 @@ mod test {
         let table = ParseTable::new(g)?;
 
         // I0
-        assert_eq!(table.actions[0][0], TableEntry::Error); // Saug
+        assert_eq!(table.actions[0][0], TableEntry::Error); // S'
         assert_eq!(table.actions[0][1], TableEntry::Goto(1)); // S
         assert_eq!(table.actions[0][2], TableEntry::Goto(2)); // C
         assert_eq!(
@@ -236,7 +235,7 @@ mod test {
         assert_eq!(table.actions[0][table.eof_index], TableEntry::Error);
 
         // I1
-        assert_eq!(table.actions[1][0], TableEntry::Error); // Saug
+        assert_eq!(table.actions[1][0], TableEntry::Error); // S'
         assert_eq!(table.actions[1][1], TableEntry::Error); // S
         assert_eq!(table.actions[1][2], TableEntry::Error); // C
         assert_eq!(
@@ -250,7 +249,7 @@ mod test {
         assert_eq!(table.actions[1][table.eof_index], TableEntry::Accept);
 
         // I2
-        assert_eq!(table.actions[2][0], TableEntry::Error); // Saug
+        assert_eq!(table.actions[2][0], TableEntry::Error); // S'
         assert_eq!(table.actions[2][1], TableEntry::Error); // S
         assert_eq!(table.actions[2][2], TableEntry::Goto(5)); // C
         assert_eq!(
@@ -264,7 +263,7 @@ mod test {
         assert_eq!(table.actions[2][table.eof_index], TableEntry::Error);
 
         // I3
-        assert_eq!(table.actions[3][0], TableEntry::Error); // Saug
+        assert_eq!(table.actions[3][0], TableEntry::Error); // S'
         assert_eq!(table.actions[3][1], TableEntry::Error); // S
         assert_eq!(table.actions[3][2], TableEntry::Goto(8)); // C
         assert_eq!(
@@ -278,7 +277,7 @@ mod test {
         assert_eq!(table.actions[3][table.eof_index], TableEntry::Error);
 
         // I4
-        assert_eq!(table.actions[4][0], TableEntry::Error); // Saug
+        assert_eq!(table.actions[4][0], TableEntry::Error); // S'
         assert_eq!(table.actions[4][1], TableEntry::Error); // S
         assert_eq!(table.actions[4][2], TableEntry::Error); // C
         assert_eq!(
@@ -292,7 +291,7 @@ mod test {
         assert_eq!(table.actions[4][table.eof_index], TableEntry::Error);
 
         // I5
-        assert_eq!(table.actions[5][0], TableEntry::Error); // Saug
+        assert_eq!(table.actions[5][0], TableEntry::Error); // S'
         assert_eq!(table.actions[5][1], TableEntry::Error); // S
         assert_eq!(table.actions[5][2], TableEntry::Error); // C
         assert_eq!(
@@ -306,7 +305,7 @@ mod test {
         assert_eq!(table.actions[5][table.eof_index], TableEntry::Reduce(1));
 
         // I6
-        assert_eq!(table.actions[6][0], TableEntry::Error); // Saug
+        assert_eq!(table.actions[6][0], TableEntry::Error); // S'
         assert_eq!(table.actions[6][1], TableEntry::Error); // S
         assert_eq!(table.actions[6][2], TableEntry::Goto(9)); // C
         assert_eq!(
@@ -320,7 +319,7 @@ mod test {
         assert_eq!(table.actions[6][table.eof_index], TableEntry::Error);
 
         // I7
-        assert_eq!(table.actions[7][0], TableEntry::Error); // Saug
+        assert_eq!(table.actions[7][0], TableEntry::Error); // S'
         assert_eq!(table.actions[7][1], TableEntry::Error); // S
         assert_eq!(table.actions[7][2], TableEntry::Error); // C
         assert_eq!(
@@ -334,7 +333,7 @@ mod test {
         assert_eq!(table.actions[7][table.eof_index], TableEntry::Reduce(3));
 
         // I8
-        assert_eq!(table.actions[8][0], TableEntry::Error); // Saug
+        assert_eq!(table.actions[8][0], TableEntry::Error); // S'
         assert_eq!(table.actions[8][1], TableEntry::Error); // S
         assert_eq!(table.actions[8][2], TableEntry::Error); // C
         assert_eq!(
@@ -348,7 +347,7 @@ mod test {
         assert_eq!(table.actions[8][table.eof_index], TableEntry::Error);
 
         // I9
-        assert_eq!(table.actions[9][0], TableEntry::Error); // Saug
+        assert_eq!(table.actions[9][0], TableEntry::Error); // S'
         assert_eq!(table.actions[9][1], TableEntry::Error); // S
         assert_eq!(table.actions[9][2], TableEntry::Error); // C
         assert_eq!(
