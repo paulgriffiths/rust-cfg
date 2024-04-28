@@ -2,9 +2,9 @@ use super::value::Value;
 use crate::errors::{Error, Result};
 use crate::grammar::Grammar;
 use crate::parsers::lr;
+use crate::parsers::lr::slr::ParseTable;
 use crate::parsers::lr::Parser;
 use crate::parsers::parsetree::{Child, Node, Tree};
-use crate::parsers::lr::slr::ParseTable;
 
 static GRAMMAR_TEXT: &str = "
 # Addition, subtraction, multiplication and division are left-associative
