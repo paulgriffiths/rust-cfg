@@ -1,4 +1,4 @@
-use super::items;
+use super::items::Collection;
 use super::InputSymbol;
 use super::{PTable, TableEntry};
 use crate::errors::{Error, Result};
@@ -37,7 +37,7 @@ impl ParseTable {
         // "actions" on terminals also include GOTOs for non-terminals in the
         // same table for efficiency, since the sets of terminal IDs and
         // non-terminal IDs are distinct
-        let collection = items::canonical_collection(&grammar);
+        let collection = Collection::new(&grammar);
         let mut actions: Vec<Vec<TableEntry>> = Vec::with_capacity(collection.collection.len());
         for _ in 0..collection.collection.len() {
             // Add a table row for each state, pre-populated with error actions

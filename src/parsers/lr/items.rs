@@ -87,9 +87,17 @@ pub struct Collection {
     pub shifts_and_gotos: Vec<Vec<Option<usize>>>,
 }
 
+impl Collection {
+    /// Returns the canonical collection of sets of LR(0) items for the given
+    /// augmented grammar
+    pub fn new(g: &Grammar) -> Collection {
+        canonical_collection(g)
+    }
+}
+
 /// Returns the canonical collection of sets of LR(0) items for the given
 /// augmented grammar
-pub fn canonical_collection(g: &Grammar) -> Collection {
+fn canonical_collection(g: &Grammar) -> Collection {
     // Algorithm adapted from Aho et al (2007) p.246
 
     let start_set = ItemSet::from([Item::new_production(
@@ -294,7 +302,7 @@ mod test {
 
         let g = Grammar::new_from_file(&test_file_path("grammars/slr/expr_aug.cfg"))?;
 
-        let c = canonical_collection(&g);
+        let c = Collection::new(&g);
         assert_eq!(c.collection.len(), 12);
 
         // I0
