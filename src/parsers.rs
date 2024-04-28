@@ -1,16 +1,9 @@
-pub mod clr;
-mod items;
 pub mod lr;
-mod lritems;
 pub mod parsetree;
 pub mod predictive;
 pub mod rd;
 mod reader;
-pub mod slr;
-mod stack;
 use crate::grammar::{FirstItem, FollowItem};
-pub use items::Item;
-pub use lritems::LRItem;
 use std::cmp::{Ord, Ordering, PartialOrd};
 use std::convert::From;
 use std::fmt;

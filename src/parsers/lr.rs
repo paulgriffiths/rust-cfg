@@ -1,11 +1,18 @@
-use super::clr::ParseTable as CanonicalLRParseTable;
+pub mod clr;
+mod items;
+mod lritems;
+pub mod slr;
+mod stack;
 use super::parsetree::{Child, Node, Tree};
 use super::reader::Reader;
-use super::slr::ParseTable as SimpleLRParseTable;
-use super::stack::{Stack, StackValue};
 use super::InputSymbol;
 use crate::errors::{Error, Result};
 use crate::grammar::{Grammar, Symbol};
+use clr::ParseTable as CanonicalLRParseTable;
+pub use items::Item;
+pub use lritems::LRItem;
+use slr::ParseTable as SimpleLRParseTable;
+use stack::{Stack, StackValue};
 use std::collections::VecDeque;
 
 /// An LR parsing automaton

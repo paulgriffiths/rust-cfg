@@ -1,6 +1,6 @@
 use super::items::{Item, ItemSet, ItemStateSet};
-use super::lr::{PTable, TableEntry};
 use super::InputSymbol;
+use super::{PTable, TableEntry};
 use crate::errors::{Error, Result};
 use crate::grammar::{FollowItem, Grammar, Symbol};
 use std::collections::{HashMap, HashSet};

@@ -1,6 +1,6 @@
 use crate::grammar::Grammar;
-use crate::parsers::clr;
-use crate::parsers::slr;
+use crate::parsers::lr::clr;
+use crate::parsers::lr::slr;
 use crate::parsers::InputSymbol;
 
 /// Outputs the canonical collection of simple LR items
