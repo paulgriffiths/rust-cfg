@@ -93,6 +93,25 @@ impl Collection {
     pub fn new(g: &Grammar) -> Collection {
         canonical_collection(g)
     }
+
+    /// Returns a copy of the collection with non-kernel items removed. The
+    /// SHIFTS and GOTOs are also emptied.
+    pub fn kernels(&self, g: &Grammar) -> Collection {
+        let mut kernels: Vec<ItemSet> = Vec::new();
+
+        for c in &self.collection {
+            kernels.push(ItemSet::from_iter(
+                c.iter()
+                    .filter(|s| s.dot != 0 || g.production(s.production).head == g.start())
+                    .cloned(),
+            ));
+        }
+
+        Collection {
+            collection: kernels,
+            shifts_and_gotos: Vec::new(),
+        }
+    }
 }
 
 /// Returns the canonical collection of sets of LR(0) items for the given
@@ -423,6 +442,124 @@ mod test {
             production: 5,
         }]);
         assert_closure(&c.collection[11], &items, &[]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_canonical_collection_kernals() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        // Grammar and test cases taken from Aho et al (2007) p.244
+
+        let g = Grammar::new_from_file(&test_file_path("grammars/slr/expr_aug.cfg"))?;
+
+        let c = Collection::new(&g);
+        let kernels = c.kernels(&g);
+        assert_eq!(kernels.collection.len(), 12);
+
+        // I0
+        let items = ItemSet::from([Item::new_production(0)]);
+        assert_eq!(kernels.collection[0], items);
+
+        // I1
+        let items = ItemSet::from([
+            Item {
+                dot: 1,
+                production: 0,
+            },
+            Item {
+                dot: 1,
+                production: 1,
+            },
+        ]);
+        assert_eq!(kernels.collection[1], items);
+
+        // I2
+        let items = ItemSet::from([
+            Item {
+                dot: 1,
+                production: 2,
+            },
+            Item {
+                dot: 1,
+                production: 3,
+            },
+        ]);
+        assert_eq!(kernels.collection[2], items);
+
+        // I3
+        let items = ItemSet::from([Item {
+            dot: 1,
+            production: 4,
+        }]);
+        assert_eq!(kernels.collection[3], items);
+
+        // I4
+        let items = ItemSet::from([Item {
+            dot: 1,
+            production: 5,
+        }]);
+        assert_eq!(kernels.collection[4], items);
+
+        // I5
+        let items = ItemSet::from([Item {
+            dot: 1,
+            production: 6,
+        }]);
+        assert_eq!(kernels.collection[5], items);
+
+        // I6
+        let items = ItemSet::from([Item {
+            dot: 2,
+            production: 1,
+        }]);
+        assert_eq!(kernels.collection[6], items);
+
+        // I7
+        let items = ItemSet::from([Item {
+            dot: 2,
+            production: 3,
+        }]);
+        assert_eq!(kernels.collection[7], items);
+
+        // I8
+        let items = ItemSet::from([
+            Item {
+                dot: 1,
+                production: 1,
+            },
+            Item {
+                dot: 2,
+                production: 5,
+            },
+        ]);
+        assert_eq!(kernels.collection[8], items);
+
+        // I9
+        let items = ItemSet::from([
+            Item {
+                dot: 3,
+                production: 1,
+            },
+            Item {
+                dot: 1,
+                production: 3,
+            },
+        ]);
+        assert_eq!(kernels.collection[9], items);
+
+        // I10
+        let items = ItemSet::from([Item {
+            dot: 3,
+            production: 3,
+        }]);
+        assert_eq!(kernels.collection[10], items);
+
+        // I11
+        let items = ItemSet::from([Item {
+            dot: 3,
+            production: 5,
+        }]);
+        assert_eq!(kernels.collection[11], items);
 
         Ok(())
     }
