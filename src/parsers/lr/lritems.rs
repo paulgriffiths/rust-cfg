@@ -7,7 +7,7 @@ use std::hash::{Hash, Hasher};
 pub type LRItemSet = std::collections::HashSet<LRItem>;
 
 #[derive(Debug, Eq, Hash, PartialEq, Clone, Copy)]
-/// An LR(1) parse item
+/// An LR(1) item
 pub struct LRItem {
     pub dot: usize,
     pub production: usize,
@@ -31,7 +31,7 @@ impl PartialOrd for LRItem {
 }
 
 impl LRItem {
-    /// Returns a new item for a given production with the dot at the left end
+    /// Returns a new item for a given production with the dot at the left
     pub fn new_production(production: usize, lookahead: InputSymbol) -> LRItem {
         LRItem {
             dot: 0,
@@ -40,7 +40,7 @@ impl LRItem {
         }
     }
 
-    /// Returns a new item for ϵ
+    /// Returns a new item for ϵ with the dot at the right
     pub fn new_e(production: usize, lookahead: InputSymbol) -> LRItem {
         LRItem {
             dot: 1,
@@ -49,7 +49,8 @@ impl LRItem {
         }
     }
 
-    /// Returns a copy of the item with the dot advanced one position
+    /// Returns a copy of the item with the dot advanced one position. The
+    /// production is not checked to ensure the advanced position is valid.
     pub fn advance(&self) -> LRItem {
         LRItem {
             dot: self.dot + 1,
@@ -58,7 +59,7 @@ impl LRItem {
         }
     }
 
-    /// Returns true if the dot is at the right end
+    /// Returns true if the dot is at the right
     pub fn is_end(&self, g: &Grammar) -> bool {
         self.dot == g.production(self.production).body.len()
     }
@@ -105,7 +106,7 @@ pub fn canonical_collection(g: &Grammar) -> Collection {
         InputSymbol::EndOfInput,
     )]);
 
-    // Initialize collection with CLOSURE([Saug → ·S, $])
+    // Initialize collection with CLOSURE([S' → ·S, $])
     let mut collection: Vec<LRItemSet> = vec![closure(g, &start_set)];
 
     let mut seen: HashMap<LRItemStateSet, usize> = HashMap::new();
@@ -150,9 +151,13 @@ pub fn canonical_collection(g: &Grammar) -> Collection {
                             }
                             Some(i) if i == set_index => (),
                             _ => {
-                                // We have a conflict
-                                // TODO: replace this with error
-                                panic!("conflict in shifts_and_gotos");
+                                // We shouldn't get a conflict as each set is
+                                // defined as the set of items which can be
+                                // generated on an input symbol from a previous
+                                // state, so the same input symbol applies to
+                                // the same set should never yield a different
+                                // set.
+                                panic!("conflict calculating shifts and gotos");
                             }
                         }
                     }
