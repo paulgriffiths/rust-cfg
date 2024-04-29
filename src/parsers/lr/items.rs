@@ -200,7 +200,7 @@ fn canonical_collection(g: &Grammar) -> Collection {
 }
 
 /// Returns CLOSURE(items)
-fn closure(g: &Grammar, items: &ItemSet) -> ItemSet {
+pub fn closure(g: &Grammar, items: &ItemSet) -> ItemSet {
     // Algorithm adapted from Aho et al (2007) p.243
 
     let mut closure = ItemSet::new();
@@ -255,7 +255,7 @@ fn closure(g: &Grammar, items: &ItemSet) -> ItemSet {
 }
 
 /// Returns GOTO(items, s)
-fn goto(g: &Grammar, items: &ItemSet, s: Symbol) -> ItemSet {
+pub fn goto(g: &Grammar, items: &ItemSet, s: Symbol) -> ItemSet {
     // Algorithm adapted from Aho et al (2007) p.246
 
     // GOTO(items) is defined to be the closure of the set of all items

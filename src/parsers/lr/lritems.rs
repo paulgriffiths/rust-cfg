@@ -1,3 +1,4 @@
+use super::items;
 use super::InputSymbol;
 use crate::grammar::{Grammar, Symbol};
 use std::cmp::Ordering;
@@ -102,6 +103,10 @@ impl Collection {
     pub fn new(g: &Grammar) -> Collection {
         canonical_collection(g)
     }
+
+    pub fn new_lalr(g: &Grammar) -> Collection {
+        canonical_lalr_collection(g)
+    }
 }
 
 /// Returns the canonical collection of sets of LR(1) items for the given
@@ -187,6 +192,184 @@ fn canonical_collection(g: &Grammar) -> Collection {
     Collection {
         collection,
         shifts_and_gotos,
+    }
+}
+
+/// Returns the kernels of the LALR(1) collection of sets of items for
+/// (augmented) grammar g.
+fn canonical_lalr_collection(g: &Grammar) -> Collection {
+    // Algorithm adapted from Aho et al (2007) p.273
+
+    // First, get the set of LR(0) items for the (augmented) grammar, and
+    // extract the kernels.
+    let collection = items::Collection::new(g);
+    let kernels = collection.kernels(g);
+
+    // Create a map from the kernels for easy calculation of GOTO(I, X)
+    let mut state_set: HashMap<items::ItemStateSet, usize> = HashMap::new();
+    for (i, k) in kernels.collection.iter().enumerate() {
+        state_set.insert(items::ItemStateSet(k.clone()), i);
+    }
+
+    // We need to refer to individual LR(0) items deterministically, so decant
+    // them from the set into a vector of vectors
+    let mut table_items: Vec<Vec<items::Item>> = Vec::with_capacity(kernels.collection.len());
+    for i in 0..kernels.collection.len() {
+        table_items.push(kernels.collection[i].iter().cloned().collect());
+    }
+
+    // For each LR(0) item, we need to build a table that includes lookaheads
+    // spontaneously generated for kernel items in GOTO(I, X), and from which
+    // items in I lookaheads are propagated to kernel items in GOTO(I, X)
+    #[derive(Debug, Clone)]
+    struct LookupEntry {
+        /// Lookaheads for this item
+        lookaheads: HashSet<InputSymbol>,
+        /// Items from which lookaheads propagate to this item
+        propagates: HashSet<(usize, usize)>,
+    }
+
+    let mut table: Vec<Vec<LookupEntry>> = Vec::with_capacity(table_items.len());
+    for item in &table_items {
+        table.push(vec![
+            LookupEntry {
+                lookaheads: HashSet::new(),
+                propagates: HashSet::new()
+            };
+            item.len()
+        ]);
+    }
+
+    // Manually insert the end-of-input lookahead for the (augmented) start
+    // production
+    table[0][0].lookaheads.insert(InputSymbol::EndOfInput);
+
+    // Iterate through the kernels of the LR(0) sets of items
+    for state in 0..table_items.len() {
+        for k in 0..table_items[state].len() {
+            let item = &table_items[state][k];
+
+            // Calculate the LR(1) closure of this item on an lookahead symbol
+            // not in the grammar, which we here represent by the null
+            // character
+            let closure = closure(
+                g,
+                &LRItemSet::from([LRItem {
+                    production: item.production,
+                    dot: item.dot,
+                    lookahead: InputSymbol::Character(0 as char),
+                }]),
+            );
+
+            for item in closure {
+                // We're looking for items in the closure [B → 𝛾·X𝛿,a] where
+                // X is a grammar symbol, so skip over any item where the
+                // dot is at the right
+                if item.is_end(g) {
+                    continue;
+                }
+
+                // Iterate through all the grammar symbols
+                for symbol in g.symbols() {
+                    // Skip this item if the current grammar symbol doesn't
+                    // appear after the dot
+                    // TODO - do we need to do this? Can't we just look at the
+                    // symbol after the dot?
+                    if g.production(item.production).body[item.dot] != *symbol {
+                        continue;
+                    }
+
+                    // Calculate GOTO(item, symbol)
+                    let goto: Vec<_> = items::goto(g, &collection.collection[state], *symbol)
+                        .iter()
+                        .filter(|i| i.dot != 0 || g.production(i.production).head == g.start())
+                        .cloned()
+                        .collect();
+                    let goto = *state_set
+                        .get(&items::ItemStateSet(items::ItemSet::from_iter(
+                            goto.into_iter(),
+                        )))
+                        .unwrap();
+
+                    // Find [B → 𝛾X·𝛿,a] in GOTO(item, symbol)
+                    let next_item = items::Item {
+                        production: item.production,
+                        dot: item.dot,
+                    }
+                    .advance();
+
+                    for t in 0..table_items[goto].len() {
+                        if table_items[goto][t] == next_item {
+                            match item.lookahead {
+                                // If [B → 𝛾·X𝛿,a] and a is the dummy symbol,
+                                // conclude that lookaheads propagate from the
+                                // kernel with which we started to [B → 𝛾X·𝛿,a]
+                                // in GOTO(item, symbol)
+                                InputSymbol::Character(c) if c == 0 as char => {
+                                    table[goto][t].propagates.insert((state, k));
+                                }
+                                // If [B → 𝛾·X𝛿,a] and a is not the dummy symbol,
+                                // conclude that lookahead a is spontaneously
+                                // generated for [B → 𝛾X·𝛿,a] in GOTO(item, symbol)
+                                _ => {
+                                    table[goto][t].lookaheads.insert(item.lookahead);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Now calculate all the lookahead and populate the LALR(1) kernel items
+    let mut collection: Vec<LRItemSet> = Vec::with_capacity(kernels.collection.len());
+    for _ in 0..kernels.collection.len() {
+        collection.push(LRItemSet::new());
+    }
+
+    let mut count = 0;
+    loop {
+        // Iterate through all the entries in the table and propagate
+        // the lookaheads
+        for i in 0..table.len() {
+            for j in 0..table[i].len() {
+                // Propagate the lookaheads
+                for (x, y) in table[i][j].clone().propagates.into_iter() {
+                    for c in table[x][y].lookaheads.clone().into_iter() {
+                        table[i][j].lookaheads.insert(c);
+                    }
+                }
+
+                // Add the LALR(1) kernel items while we're here. This adds
+                // the same items an unnecessary amount of times, but this
+                // function is already long enough.
+                let item = &table_items[i][j];
+                for c in table[i][j].lookaheads.iter() {
+                    collection[i].insert(LRItem {
+                        production: item.production,
+                        dot: item.dot,
+                        lookahead: *c,
+                    });
+                }
+            }
+        }
+
+        // Continue until no more new lookaheads are propagated
+        let new_count: usize = table
+            .iter()
+            .flat_map(|s: &Vec<_>| s.iter())
+            .map(|e| e.lookaheads.len())
+            .sum();
+        if new_count == count {
+            break;
+        }
+        count = new_count;
+    }
+
+    Collection {
+        collection,
+        shifts_and_gotos: Vec::new(),
     }
 }
 
@@ -523,6 +706,135 @@ mod test {
         assert_eq!(c.shifts_and_gotos[9][2], None);
         assert_eq!(c.shifts_and_gotos[9][g.terminal_index('c')], None);
         assert_eq!(c.shifts_and_gotos[9][g.terminal_index('d')], None);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_canonical_lalr_collection() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        // Grammar and test cases taken from Aho et al (2007) p.275
+
+        let g = Grammar::new_from_file(&test_file_path("grammars/lalr/l_r_values_aug.cfg"))?;
+
+        let c = Collection::new_lalr(&g);
+        assert_eq!(c.collection.len(), 10);
+
+        // I0
+        let items = LRItemSet::from([LRItem {
+            production: 0,
+            dot: 0,
+            lookahead: InputSymbol::EndOfInput,
+        }]);
+        assert_eq!(items, c.collection[0]);
+
+        // I1
+        let items = LRItemSet::from([LRItem {
+            production: 0,
+            dot: 1,
+            lookahead: InputSymbol::EndOfInput,
+        }]);
+        assert_eq!(items, c.collection[1]);
+
+        // I2
+        let items = LRItemSet::from([
+            LRItem {
+                production: 1,
+                dot: 1,
+                lookahead: InputSymbol::EndOfInput,
+            },
+            LRItem {
+                production: 5,
+                dot: 1,
+                lookahead: InputSymbol::EndOfInput,
+            },
+        ]);
+        assert_eq!(items, c.collection[2]);
+
+        // I3
+        let items = LRItemSet::from([LRItem {
+            production: 2,
+            dot: 1,
+            lookahead: InputSymbol::EndOfInput,
+        }]);
+        assert_eq!(items, c.collection[3]);
+
+        // I4
+        let items = LRItemSet::from([
+            LRItem {
+                production: 3,
+                dot: 1,
+                lookahead: InputSymbol::Character('='),
+            },
+            LRItem {
+                production: 3,
+                dot: 1,
+                lookahead: InputSymbol::EndOfInput,
+            },
+        ]);
+        assert_eq!(items, c.collection[4]);
+
+        // I5
+        let items = LRItemSet::from([
+            LRItem {
+                production: 4,
+                dot: 1,
+                lookahead: InputSymbol::Character('='),
+            },
+            LRItem {
+                production: 4,
+                dot: 1,
+                lookahead: InputSymbol::EndOfInput,
+            },
+        ]);
+        assert_eq!(items, c.collection[5]);
+
+        // I6
+        let items = LRItemSet::from([LRItem {
+            production: 1,
+            dot: 2,
+            lookahead: InputSymbol::EndOfInput,
+        }]);
+        assert_eq!(items, c.collection[6]);
+
+        // I7
+        // I7 and I8 are flipped compared with Aho et al
+        let items = LRItemSet::from([
+            LRItem {
+                production: 5,
+                dot: 1,
+                lookahead: InputSymbol::Character('='),
+            },
+            LRItem {
+                production: 5,
+                dot: 1,
+                lookahead: InputSymbol::EndOfInput,
+            },
+        ]);
+        assert_eq!(items, c.collection[7]);
+
+        // I8
+        // I7 and I8 are flipped compared with Aho et al
+        let items = LRItemSet::from([
+            LRItem {
+                production: 3,
+                dot: 2,
+                lookahead: InputSymbol::Character('='),
+            },
+            LRItem {
+                production: 3,
+                dot: 2,
+                lookahead: InputSymbol::EndOfInput,
+            },
+        ]);
+        assert_eq!(items, c.collection[8]);
+
+        // I9
+        let items = LRItemSet::from([LRItem {
+            production: 1,
+            dot: 3,
+            lookahead: InputSymbol::EndOfInput,
+        }]);
+        assert_eq!(items, c.collection[9]);
 
         Ok(())
     }
