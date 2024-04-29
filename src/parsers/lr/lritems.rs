@@ -124,9 +124,11 @@ fn canonical_collection(g: &Grammar) -> Collection {
     shifts_and_gotos.push(vec![None; g.symbols().len()]);
 
     let mut count = collection.len();
+    let mut processed = 0;
     loop {
-        // Iterate through all the sets currently in the collection
-        for i in 0..count {
+        // Iterate through all the sets in the collection we haven't processed
+        // yet
+        for i in processed..count {
             // For each grammar symbol X, if GOTO(i, X) is not empty and not
             // already in the collection, add it to the collection
             for symbol in g.symbols() {
@@ -177,11 +179,11 @@ fn canonical_collection(g: &Grammar) -> Collection {
         }
 
         // Continue until no new sets are added to the collection on a round
-        let new_count = collection.len();
-        if new_count == count {
+        processed = count;
+        count = collection.len();
+        if count == processed {
             break;
         }
-        count = new_count;
     }
 
     Collection {
