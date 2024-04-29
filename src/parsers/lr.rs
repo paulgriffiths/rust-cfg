@@ -1,5 +1,6 @@
 pub mod clr;
 pub mod items;
+pub mod lalr;
 pub mod lritems;
 pub mod slr;
 mod stack;
