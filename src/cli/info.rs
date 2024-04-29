@@ -34,6 +34,12 @@ pub fn output(g: &Grammar, verbose: bool) {
     println!("{:w$}: {}", "SLR(1)", lr::new_simple(g).is_ok(), w = width);
     println!(
         "{:w$}: {}",
+        "LALR(1)",
+        lr::new_lookahead(g).is_ok(),
+        w = width
+    );
+    println!(
+        "{:w$}: {}",
         "LR(1)",
         lr::new_canonical(g).is_ok(),
         w = width

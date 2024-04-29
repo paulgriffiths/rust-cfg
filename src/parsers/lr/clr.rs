@@ -102,23 +102,23 @@ impl ParseTable {
             // Shouldn't happen, since GOTO is for non-terminals, and
             // reductions are for terminals/end-of-input
             TableEntry::Goto(_) => {
-                panic!(
+                return Err(Error::GrammarNotLR1(format!(
                     "conflict between SHIFT and GOTO from {} to {} on {}",
                     from,
                     to,
                     self.grammar.terminal_value(t),
-                );
+                )));
             }
             // Shouldn't happen either, since the method of constructing the
             // state sets renders SHIFT-SHIFT conflicts impossible
             TableEntry::Shift(existing) => {
                 if existing != to {
-                    panic!(
+                    return Err(Error::GrammarNotLR1(format!(
                         "SHIFT already found from {} to {} on {}",
                         from,
                         to,
                         self.grammar.terminal_value(t)
-                    );
+                    )));
                 }
             }
             // Table entry was not previously set, so set it
@@ -157,16 +157,18 @@ impl ParseTable {
                 )));
             }
             TableEntry::Reduce(r) => {
-                return Err(Error::GrammarNotLR1(format!(
-                    concat!(
-                        "conflict between reduce({}) and reduce({}) ",
-                        "for state {} on input character '{}'"
-                    ),
-                    self.grammar.format_production(item.production),
-                    self.grammar.format_production(r),
-                    from,
-                    item.lookahead,
-                )));
+                if r != item.production {
+                    return Err(Error::GrammarNotLR1(format!(
+                        concat!(
+                            "conflict between reduce({}) and reduce({}) ",
+                            "for state {} on input character '{}'"
+                        ),
+                        self.grammar.format_production(item.production),
+                        self.grammar.format_production(r),
+                        from,
+                        item.lookahead,
+                    )));
+                }
             }
             // Shouldn't happen, since GOTO is for non-terminals, and
             // reductions are for terminals/end-of-input

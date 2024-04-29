@@ -1,4 +1,3 @@
-use super::lalr;
 use super::InputSymbol;
 use crate::grammar::{Grammar, Symbol};
 use std::cmp::Ordering;
@@ -102,10 +101,6 @@ impl Collection {
     /// augmented grammar
     pub fn new(g: &Grammar) -> Collection {
         canonical_collection(g)
-    }
-
-    pub fn new_lalr(g: &Grammar) -> Collection {
-        lalr::lalr_collection_kernels(g)
     }
 }
 
@@ -280,7 +275,7 @@ pub fn closure(g: &Grammar, items: &LRItemSet) -> LRItemSet {
 }
 
 /// Returns GOTO(items, s)
-fn goto(g: &Grammar, items: &LRItemSet, s: Symbol) -> LRItemSet {
+pub fn goto(g: &Grammar, items: &LRItemSet, s: Symbol) -> LRItemSet {
     // Algorithm adapted from Aho et al (2007) p.261
 
     // GOTO(items) is defined to be the closure of the set of all items

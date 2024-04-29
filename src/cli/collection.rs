@@ -1,5 +1,6 @@
 use crate::grammar::Grammar;
 use crate::parsers::lr::items;
+use crate::parsers::lr::lalr;
 use crate::parsers::lr::lritems;
 use crate::parsers::InputSymbol;
 
@@ -57,9 +58,15 @@ pub fn output(g: &Grammar) {
 }
 
 /// Outputs the canonical collection of canonical LR items
-pub fn output_canonical(g: &Grammar) {
+pub fn output_canonical(g: &Grammar, lalr: bool) {
     let g = g.augment();
-    let collection = lritems::Collection::new(&g).collection;
+    let collection = {
+        if lalr {
+            lalr::lalr_collection(&g)
+        } else {
+            lritems::Collection::new(&g).collection
+        }
+    };
     let collection_len = collection.len();
 
     for (i, set) in collection.into_iter().enumerate() {

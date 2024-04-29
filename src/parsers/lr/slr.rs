@@ -102,22 +102,22 @@ impl ParseTable {
             // Shouldn't happen, since GOTO is for non-terminals, and
             // reductions are for terminals/end-of-input
             TableEntry::Goto(_) => {
-                panic!(
+                return Err(Error::GrammarNotSLR1(format!(
                     "conflict between SHIFT and GOTO from {} to {} on {}",
                     from,
                     to,
                     self.grammar.terminal_value(t),
-                );
+                )));
             }
-            // Shouldn't happen either, since the method of constructing the
-            // state sets renders SHIFT-SHIFT conflicts impossible
-            TableEntry::Shift(_) => {
-                panic!(
-                    "SHIFT already found from {} to {} on {}",
-                    from,
-                    to,
-                    self.grammar.terminal_value(t)
-                );
+            TableEntry::Shift(existing) => {
+                if existing != to {
+                    return Err(Error::GrammarNotSLR1(format!(
+                        "SHIFT already found from {} to {} on {}",
+                        from,
+                        to,
+                        self.grammar.terminal_value(t)
+                    )));
+                }
             }
             // Table entry was not previously set, so set it
             TableEntry::Error => {
@@ -157,16 +157,18 @@ impl ParseTable {
                     )));
                 }
                 TableEntry::Reduce(r) => {
-                    return Err(Error::GrammarNotSLR1(format!(
-                        concat!(
-                            "conflict between reduce({}) and reduce({}) ",
-                            "for state {} on input character '{}'"
-                        ),
-                        self.grammar.format_production(p),
-                        self.grammar.format_production(r),
-                        from,
-                        InputSymbol::from(item),
-                    )));
+                    if r != p {
+                        return Err(Error::GrammarNotSLR1(format!(
+                            concat!(
+                                "conflict between reduce({}) and reduce({}) ",
+                                "for state {} on input character '{}'"
+                            ),
+                            self.grammar.format_production(p),
+                            self.grammar.format_production(r),
+                            from,
+                            InputSymbol::from(item),
+                        )));
+                    }
                 }
                 TableEntry::Shift(s) => {
                     return Err(Error::GrammarNotSLR1(format!(
@@ -183,10 +185,10 @@ impl ParseTable {
                 // Shouldn't happen, since GOTO is for non-terminals, and
                 // reductions are for terminals/end-of-input
                 TableEntry::Goto(_) => {
-                    panic!(
+                    return Err(Error::GrammarNotSLR1(format!(
                         "conflict between SHIFT and GOTO from {} on {:?}",
                         from, item
-                    );
+                    )));
                 }
                 // Table entry was not previously set, so set it
                 TableEntry::Error => {

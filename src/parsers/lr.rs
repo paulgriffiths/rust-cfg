@@ -10,6 +10,7 @@ use super::InputSymbol;
 use crate::errors::{Error, Result};
 use crate::grammar::{Grammar, Symbol};
 use clr::ParseTable as CanonicalLRParseTable;
+use lalr::ParseTable as LALRParseTable;
 use slr::ParseTable as SimpleLRParseTable;
 use stack::{Stack, StackValue};
 use std::collections::VecDeque;
@@ -47,6 +48,13 @@ pub fn new_simple(grammar: &Grammar) -> Result<Parser<SimpleLRParseTable>> {
 pub fn new_canonical(grammar: &Grammar) -> Result<Parser<CanonicalLRParseTable>> {
     Ok(Parser {
         table: CanonicalLRParseTable::new(grammar.augment())?,
+    })
+}
+
+/// Creates a new parser with an LALR parse table
+pub fn new_lookahead(grammar: &Grammar) -> Result<Parser<LALRParseTable>> {
+    Ok(Parser {
+        table: LALRParseTable::new(grammar.augment())?,
     })
 }
 
@@ -174,6 +182,24 @@ mod test {
     fn test_parse_canonical() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let g = Grammar::new_from_file(&test_file_path("grammars/lr_simple_expr.cfg"))?;
         let parser = new_canonical(&g)?;
+
+        let tree = parser.parse("a+b*c")?;
+        assert_eq!(tree.frontier(), "a+b*c");
+        assert_eq!(
+            tree.visualize(&g),
+            concat!(
+                "E→[E→[T→[F→[ID→[letter→['a'] ID'→[ϵ]]]]] ",
+                "'+' T→[T→[F→[ID→[letter→['b'] ID'→[ϵ]]]] ",
+                "'*' F→[ID→[letter→['c'] ID'→[ϵ]]]]]"
+            )
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_parse_lalr() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let g = Grammar::new_from_file(&test_file_path("grammars/lr_simple_expr.cfg"))?;
+        let parser = new_lookahead(&g)?;
 
         let tree = parser.parse("a+b*c")?;
         assert_eq!(tree.frontier(), "a+b*c");

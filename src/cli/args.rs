@@ -19,6 +19,9 @@ pub enum Commands {
         #[arg(short, long)]
         /// Output sets of LR(1) items (default is LR(0))
         canonical: bool,
+        #[arg(short, long)]
+        /// Output sets of LALR(1) items (default is LR(0))
+        lookahead: bool,
     },
     /// Output a derivation of a sentence
     Derive {
