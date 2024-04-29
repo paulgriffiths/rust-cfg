@@ -153,7 +153,11 @@ pub fn lalr_collection_kernels(g: &Grammar) -> Collection {
     loop {
         // Iterate through all the entries in the table lookaheads and
         // propagate them
-        for i in 0..table.lookaheads.len() {
+        for (i, set) in collection
+            .iter_mut()
+            .enumerate()
+            .take(table.lookaheads.len())
+        {
             for j in 0..table.lookaheads[i].len() {
                 // Propagate the lookaheads
                 for (x, y) in table.lookaheads[i][j].clone().propagates.into_iter() {
@@ -167,7 +171,7 @@ pub fn lalr_collection_kernels(g: &Grammar) -> Collection {
                 // function is already long enough.
                 let item = &table.items[i][j];
                 for c in table.lookaheads[i][j].lookaheads.iter() {
-                    collection[i].insert(LRItem {
+                    set.insert(LRItem {
                         production: item.production,
                         dot: item.dot,
                         lookahead: *c,
