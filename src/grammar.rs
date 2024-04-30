@@ -2,6 +2,7 @@ mod firstfollow;
 mod input_info;
 mod lexer;
 mod parser;
+mod symbol;
 mod symboltable;
 mod token;
 use super::utils;
@@ -12,32 +13,8 @@ use crate::parsers::InputSymbol;
 pub use firstfollow::{FirstItem, FirstSet, FirstVector, FollowItem, FollowMap, FollowSet};
 use parser::NTProductionsMap;
 use std::collections::HashSet;
+pub use symbol::Symbol;
 use symboltable::SymbolTable;
-
-/// A context-free grammar symbol
-#[derive(Debug, Clone, Copy)]
-pub enum Symbol {
-    NonTerminal(usize),
-    Terminal(usize),
-    Empty,
-}
-
-impl PartialEq for Symbol {
-    /// Tests two symbols for equality.
-    fn eq(&self, other: &Symbol) -> bool {
-        match self {
-            Symbol::NonTerminal(x) => match other {
-                Symbol::NonTerminal(y) => x == y,
-                _ => false,
-            },
-            Symbol::Terminal(x) => match other {
-                Symbol::Terminal(y) => x == y,
-                _ => false,
-            },
-            Symbol::Empty => matches!(other, Symbol::Empty),
-        }
-    }
-}
 
 /// A context-free grammar production
 #[derive(Debug, Clone)]

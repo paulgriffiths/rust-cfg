@@ -114,70 +114,136 @@ impl Collection {
     }
 }
 
+/// A builder for a canonical collection of sets of LR(0) items for an
+/// augmented grammar, along with a calculated table of SHIFTs and GOTOs
+struct Builder {
+    sets: Vec<ItemSet>,
+    seen: HashMap<ItemStateSet, usize>,
+    shifts: Vec<Vec<Option<usize>>>,
+}
+
+impl Builder {
+    /// Returns a new LR(0) canonical collection builder
+    fn new(g: &Grammar) -> Builder {
+        // Initialize collection with CLOSURE(S' → ·S)
+        let start_set = ItemSet::from([Item::new_production(
+            g.productions_for_non_terminal(g.start())[0],
+        )]);
+        let sets: Vec<ItemSet> = vec![closure(g, &start_set)];
+
+        // Store kernel items for sets we've already seen, so we can easily
+        // retrieve their indexes
+        let mut seen: HashMap<ItemStateSet, usize> = HashMap::new();
+        seen.insert(ItemStateSet(start_set.clone()), 0);
+
+        let shifts: Vec<Vec<Option<usize>>> = vec![vec![None; g.symbols().len()]];
+
+        Builder { sets, seen, shifts }
+    }
+
+    /// Adds a SHIFT/GOTO from the given state to the given state on grammar
+    /// symbol with ID s
+    fn add_shift(&mut self, from: usize, to: usize, s: usize) {
+        match self.shifts[from][s] {
+            None => {
+                self.shifts[from][s] = Some(to);
+            }
+            Some(i) if i == to => (),
+            _ => {
+                // We shouldn't get a conflict as each set is
+                // defined as the set of items which can be
+                // generated on an input symbol from a previous
+                // state, so the same input symbol applies to
+                // the same set should never yield a different
+                // set.
+                panic!("conflict calculating shifts and gotos");
+            }
+        }
+    }
+
+    /// Returns GOTO(i, s), where s is in nexts(i). If GOTO(i, s) is not
+    /// already in the collection of sets, it is added.
+    fn goto(&mut self, g: &Grammar, i: usize, s: Symbol) -> usize {
+        // Algorithm adapted from Aho et al (2007) p.246
+
+        // GOTO(items) is defined to be the closure of the set of all items
+        // A → 𝛼X·𝛽 such that A → 𝛼·X𝛽 is in items.
+        let mut goto = ItemSet::new();
+        for item in &self.sets[i] {
+            if !item.is_end(g) && g.production(item.production).body[item.dot] == s {
+                goto.insert(item.advance());
+            }
+        }
+
+        // If the set is empty, s was not in nexts(i), so panic
+        if goto.is_empty() {
+            panic!("goto is empty");
+        }
+
+        let state_set = ItemStateSet(goto.clone());
+        if let Some(idx) = self.seen.get(&state_set) {
+            // Just return the next set index if we've seen it before
+            *idx
+        } else {
+            // Otherwise add the set and return the new index
+            self.seen.insert(state_set, self.len());
+            self.sets.push(closure(g, &goto));
+            self.shifts.push(vec![None; g.symbols().len()]);
+
+            self.len() - 1
+        }
+    }
+
+    /// Returns the number of sets currently in the collection
+    fn len(&self) -> usize {
+        self.sets.len()
+    }
+
+    /// Returns a vector of grammar symbols (excluding ϵ) which appear after
+    /// the dots in each of the items in set i
+    fn nexts(&self, g: &Grammar, i: usize) -> Vec<Symbol> {
+        // Collect symbols into a set to eliminate duplicates
+        let mut symbols: HashSet<Symbol> = HashSet::new();
+        for item in &self.sets[i] {
+            if !item.is_end(g) {
+                let s = g.production(item.production).body[item.dot];
+                if !matches!(s, Symbol::Empty) {
+                    symbols.insert(s);
+                }
+            }
+        }
+
+        // Return a sorted vector for predictable behavior
+        let mut symbols: Vec<_> = symbols.into_iter().collect();
+        symbols.sort();
+
+        symbols
+    }
+}
+
 /// Returns the canonical collection of sets of LR(0) items for the given
 /// augmented grammar
 fn canonical_collection(g: &Grammar) -> Collection {
     // Algorithm adapted from Aho et al (2007) p.246
 
-    let start_set = ItemSet::from([Item::new_production(
-        g.productions_for_non_terminal(g.start())[0],
-    )]);
-
-    // Initialize collection with CLOSURE(S' → ·S)
-    let mut collection: Vec<ItemSet> = vec![closure(g, &start_set)];
-
-    let mut seen: HashMap<ItemStateSet, usize> = HashMap::new();
-    seen.insert(ItemStateSet(start_set.clone()), 0);
-
-    let mut shifts_and_gotos: Vec<Vec<Option<usize>>> = Vec::new();
-    shifts_and_gotos.push(vec![None; g.symbols().len()]);
-
-    let mut count = collection.len();
+    let mut builder = Builder::new(g);
+    let mut count = builder.len();
     let mut processed = 0;
+
     loop {
         // Iterate through the sets in the collection we haven't processed yet
         for i in processed..count {
-            // For each grammar symbol X, if GOTO(i, X) is not empty and not
-            // already in the collection, add it to the collection
-            for symbol in g.symbols() {
-                let set = goto(g, &collection[i], *symbol);
-                if set.is_empty() {
-                    continue;
-                }
-
-                let state_set = ItemStateSet(set.clone());
-                let set_index = if let Some(idx) = seen.get(&state_set) {
-                    // Just return the next set index if we've seen it before
-                    *idx
-                } else {
-                    // Otherwise add the set and return the new index
-                    collection.push(set);
-                    seen.insert(state_set, collection.len() - 1);
-                    shifts_and_gotos.push(vec![None; g.symbols().len()]);
-
-                    collection.len() - 1
-                };
+            // For each relevant grammar symbol, compute GOTO(i, symbol) and
+            // add it to the collection, if not already present
+            for symbol in builder.nexts(g, i) {
+                let j = builder.goto(g, i, symbol);
 
                 // Add a SHIFT/GOTO entry for the symbol, just because they're
                 // easy to calculate here while we're building the canonical
                 // collection, so we may as well save ourselves some work later
                 match symbol {
                     Symbol::Terminal(id) | Symbol::NonTerminal(id) => {
-                        match shifts_and_gotos[i][*id] {
-                            None => {
-                                shifts_and_gotos[i][*id] = Some(set_index);
-                            }
-                            Some(i) if i == set_index => (),
-                            _ => {
-                                // We shouldn't get a conflict as each set is
-                                // defined as the set of items which can be
-                                // generated on an input symbol from a previous
-                                // state, so the same input symbol applies to
-                                // the same set should never yield a different
-                                // set.
-                                panic!("conflict calculating shifts and gotos");
-                            }
-                        }
+                        builder.add_shift(i, j, id);
                     }
                     Symbol::Empty => {
                         panic!("ϵ found in grammar symbols");
@@ -188,15 +254,15 @@ fn canonical_collection(g: &Grammar) -> Collection {
 
         // Continue until no new sets are added to the collection on a round
         processed = count;
-        count = collection.len();
+        count = builder.len();
         if count == processed {
             break;
         }
     }
 
     Collection {
-        collection,
-        shifts_and_gotos,
+        collection: builder.sets,
+        shifts_and_gotos: builder.shifts,
     }
 }
 
