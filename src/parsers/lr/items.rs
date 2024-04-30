@@ -166,8 +166,8 @@ impl Builder {
     fn goto(&mut self, g: &Grammar, i: usize, s: Symbol) -> usize {
         // Algorithm adapted from Aho et al (2007) p.246
 
-        // GOTO(items) is defined to be the closure of the set of all items
-        // A → 𝛼X·𝛽 such that A → 𝛼·X𝛽 is in items.
+        // GOTO(i, X) is defined to be the closure of the set of all items
+        // A → 𝛼X·𝛽 such that A → 𝛼·X𝛽 is in i.
         let mut goto = ItemSet::new();
         for item in &self.sets[i] {
             if !item.is_end(g) && g.production(item.production).body[item.dot] == s {
