@@ -60,6 +60,31 @@ impl Item {
     pub fn is_kernel(&self, g: &Grammar) -> bool {
         self.dot != 0 || g.production(self.production).head == g.start()
     }
+
+    /// Returns the symbol after the dot, or None if the dot is at the right.
+    /// If include_e is false, ϵ-productions will always return None.
+    pub fn next_symbol(&self, g: &Grammar, include_e: bool) -> Option<Symbol> {
+        if self.is_end(g) {
+            None
+        } else {
+            let s = g.production(self.production).body[self.dot];
+            if s == Symbol::Empty && !include_e {
+                None
+            } else {
+                Some(s)
+            }
+        }
+    }
+
+    /// Returns true if symbol s follows the dot in the item. Always returns
+    /// false for ϵ-productions.
+    pub fn next_symbol_is(&self, g: &Grammar, s: Symbol) -> bool {
+        if let Some(next) = self.next_symbol(g, false) {
+            next == s
+        } else {
+            false
+        }
+    }
 }
 
 /// A hashable ItemSet, suitable for use in a HashSet of ItemSets
@@ -105,12 +130,9 @@ impl Collection {
 
         // Iterate until no new sets are added to the collection on a round
         while count != processed {
-            // Iterate through the sets in the collection we haven't processed yet
             for i in processed..count {
-                // For each relevant grammar symbol, add a new transition, creating
-                // a new set if necessary
-                for symbol in builder.nexts(g, i) {
-                    builder.add_transition(g, i, symbol);
+                for symbol in builder.nexts(i) {
+                    builder.add_transition(i, symbol);
                 }
             }
 
@@ -143,54 +165,51 @@ impl Collection {
 
 /// A builder for a canonical collection of sets of LR(0) items for an
 /// augmented grammar, along with a GOTO transition table
-struct Builder {
+struct Builder<'b> {
+    grammar: &'b Grammar,
     sets: Vec<ItemSet>,
-    seen: HashMap<ItemStateSet, usize>,
     goto: Vec<Vec<Option<usize>>>,
+    seen: HashMap<ItemStateSet, usize>,
 }
 
-impl Builder {
+impl Builder<'_> {
     /// Returns a new LR(0) canonical collection builder
-    fn new(g: &Grammar) -> Builder {
+    fn new(grammar: &Grammar) -> Builder {
         // Initialize collection with CLOSURE(S' → ·S)
         let start_set = ItemSet::from([Item::new_production(
-            g.productions_for_non_terminal(g.start())[0],
+            grammar.productions_for_non_terminal(grammar.start())[0],
         )]);
-        let sets: Vec<ItemSet> = vec![closure(g, &start_set)];
+        let sets: Vec<ItemSet> = vec![closure(grammar, &start_set)];
 
         // Store kernel items for sets we've already seen, so we can easily
         // retrieve their indexes
         let mut seen: HashMap<ItemStateSet, usize> = HashMap::new();
         seen.insert(ItemStateSet(start_set.clone()), 0);
 
-        let goto: Vec<Vec<Option<usize>>> = vec![vec![None; g.symbols().len()]];
+        let goto: Vec<Vec<Option<usize>>> = vec![vec![None; grammar.symbols().len()]];
 
-        Builder { sets, seen, goto }
+        Builder {
+            grammar,
+            sets,
+            seen,
+            goto,
+        }
     }
 
-    /// Adds an entry to the GOTO transition table
+    /// Adds an entry to the GOTO transition table.
     fn add_goto(&mut self, from: usize, to: usize, s: Symbol) {
-        // Get the ID of the symbol
-        let s = match s {
-            Symbol::Terminal(id) | Symbol::NonTerminal(id) => id,
-            Symbol::Empty => {
-                panic!("ϵ found in grammar symbols");
-            }
-        };
-
         // Add a transition if one does not already exist for the same value
+        let s = s.id();
         match self.goto[from][s] {
             None => {
                 self.goto[from][s] = Some(to);
             }
             Some(i) if i == to => (),
             _ => {
-                // We shouldn't get a conflict as each set is
-                // defined as the set of items which can be
-                // generated on an input symbol from a previous
-                // state, so the same input symbol applies to
-                // the same set should never yield a different
-                // set.
+                // We shouldn't get a conflict as each set is defined as the
+                // set of items which can be generated on an input symbol from
+                // a previous state, so the same input symbol applies to the
+                // same set should never yield a different set.
                 panic!("conflict calculating goto and gotos");
             }
         }
@@ -198,14 +217,14 @@ impl Builder {
 
     /// Adds a transition from set i on symbol s, adding a new set to the
     /// collection if necessary.
-    fn add_transition(&mut self, g: &Grammar, i: usize, s: Symbol) {
+    fn add_transition(&mut self, i: usize, s: Symbol) {
         // Algorithm adapted from Aho et al (2007) p.246
 
         // GOTO(i, X) is defined to be the closure of the set of all items
         // A → 𝛼X·𝛽 such that A → 𝛼·X𝛽 is in i.
         let mut goto = ItemSet::new();
         for item in &self.sets[i] {
-            if !item.is_end(g) && g.production(item.production).body[item.dot] == s {
+            if item.next_symbol_is(self.grammar, s) {
                 goto.insert(item.advance());
             }
         }
@@ -216,18 +235,16 @@ impl Builder {
         }
 
         let state_set = ItemStateSet(goto.clone());
-        let j = {
-            if let Some(idx) = self.seen.get(&state_set) {
-                // Just return the set index if we've seen it before
-                *idx
-            } else {
-                // Otherwise add the new set and return its index
-                self.seen.insert(state_set, self.len());
-                self.goto.push(vec![None; g.symbols().len()]);
-                self.sets.push(closure(g, &goto));
+        let j = if let Some(idx) = self.seen.get(&state_set) {
+            // Just return the set index if we've seen it before
+            *idx
+        } else {
+            // Otherwise add the new set and return its index
+            self.seen.insert(state_set, self.len());
+            self.goto.push(vec![None; self.grammar.symbols().len()]);
+            self.sets.push(closure(self.grammar, &goto));
 
-                self.len() - 1
-            }
+            self.len() - 1
         };
 
         self.add_goto(i, j, s);
@@ -240,15 +257,12 @@ impl Builder {
 
     /// Returns a vector of grammar symbols (excluding ϵ) which appear after
     /// the dots in each of the items in set i
-    fn nexts(&self, g: &Grammar, i: usize) -> Vec<Symbol> {
+    fn nexts(&self, i: usize) -> Vec<Symbol> {
         // Collect symbols into a set to eliminate duplicates
         let mut symbols: HashSet<Symbol> = HashSet::new();
         for item in &self.sets[i] {
-            if !item.is_end(g) {
-                let s = g.production(item.production).body[item.dot];
-                if !matches!(s, Symbol::Empty) {
-                    symbols.insert(s);
-                }
+            if let Some(s) = item.next_symbol(self.grammar, false) {
+                symbols.insert(s);
             }
         }
 
@@ -279,9 +293,9 @@ pub fn closure(g: &Grammar, items: &ItemSet) -> ItemSet {
     loop {
         // Iterate through all items currently in CLOSURE(items)
         for item in Vec::from_iter(closure.clone()) {
-            if !item.is_end(g) {
+            if let Some(s) = item.next_symbol(g, true) {
                 // Look for a non-terminal or ϵ after the dot
-                match g.production(item.production).body[item.dot] {
+                match s {
                     Symbol::NonTerminal(nt) => {
                         // If there is a non-terminal B, add B → ·𝛾 to CLOSURE(items)
                         // for all productions of B if we haven't previously added
@@ -323,7 +337,7 @@ pub fn goto(g: &Grammar, items: &ItemSet, s: Symbol) -> ItemSet {
     // A → 𝛼X·𝛽 such that A → 𝛼·X𝛽 is in items.
     let mut goto = ItemSet::new();
     for item in items {
-        if !item.is_end(g) && g.production(item.production).body[item.dot] == s {
+        if item.next_symbol_is(g, s) {
             goto.insert(item.advance());
         }
     }

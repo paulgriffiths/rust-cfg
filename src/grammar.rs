@@ -126,15 +126,7 @@ impl Grammar {
     /// Panics if any of the symbols are ϵ.
     pub fn first(&self, symbols: &[Symbol], include_e: bool) -> (FirstSet, bool) {
         // Extract symbol IDs
-        let string: Vec<usize> = symbols
-            .iter()
-            .map(|s| match *s {
-                Symbol::NonTerminal(n) | Symbol::Terminal(n) => n,
-                Symbol::Empty => {
-                    panic!("empty")
-                }
-            })
-            .collect();
+        let string: Vec<usize> = symbols.iter().map(|s| s.id()).collect();
 
         self.first_internal_ids(&string, include_e)
     }

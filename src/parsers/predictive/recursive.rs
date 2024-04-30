@@ -87,7 +87,7 @@ impl<'p> Parser<'p> {
                 Symbol::Empty => {
                     // Shouldn't happen since we know we don't have an
                     // ϵ-production
-                    panic!("symbol is empty");
+                    panic!("symbol is ϵ");
                 }
             }
         }

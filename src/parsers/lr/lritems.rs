@@ -153,26 +153,20 @@ fn canonical_collection(g: &Grammar) -> Collection {
                 // Add a SHIFT/GOTO entry for the symbol, just because they're
                 // easy to calculate here while we're building the canonical
                 // collection, so we may as well save ourselves some work later
-                match symbol {
-                    Symbol::Terminal(id) | Symbol::NonTerminal(id) => {
-                        match shifts_and_gotos[i][*id] {
-                            None => {
-                                shifts_and_gotos[i][*id] = Some(set_index);
-                            }
-                            Some(i) if i == set_index => (),
-                            _ => {
-                                // We shouldn't get a conflict as each set is
-                                // defined as the set of items which can be
-                                // generated on an input symbol from a previous
-                                // state, so the same input symbol applies to
-                                // the same set should never yield a different
-                                // set.
-                                panic!("conflict calculating shifts and gotos");
-                            }
-                        }
+                let id = symbol.id();
+                match shifts_and_gotos[i][id] {
+                    None => {
+                        shifts_and_gotos[i][id] = Some(set_index);
                     }
-                    Symbol::Empty => {
-                        panic!("ϵ found in grammar symbols");
+                    Some(i) if i == set_index => (),
+                    _ => {
+                        // We shouldn't get a conflict as each set is
+                        // defined as the set of items which can be
+                        // generated on an input symbol from a previous
+                        // state, so the same input symbol applies to
+                        // the same set should never yield a different
+                        // set.
+                        panic!("conflict calculating shifts and gotos");
                     }
                 }
             }

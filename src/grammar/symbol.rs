@@ -64,3 +64,15 @@ impl Hash for Symbol {
         }
     }
 }
+
+impl Symbol {
+    /// The ID of the symbol. Panics if the symbol is ϵ.
+    pub fn id(&self) -> usize {
+        match self {
+            Symbol::Terminal(id) | Symbol::NonTerminal(id) => *id,
+            Symbol::Empty => {
+                panic!("ϵ found in grammar symbols");
+            }
+        }
+    }
+}
