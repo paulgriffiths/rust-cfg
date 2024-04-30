@@ -340,6 +340,18 @@ mod test {
     }
 
     #[test]
+    fn test_parse_table_action() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        // Grammar taken from Aho et al (2007) p.244, test cases from p.252
+
+        let g = Grammar::new_from_file(&test_file_path("grammars/slr/expr_aug.cfg"))?;
+        let table = ParseTable::new(g)?;
+
+        assert_eq!(table.action(1, table.eof_index()), TableEntry::Accept);
+
+        Ok(())
+    }
+
+    #[test]
     fn test_parse_table_not_slr_one() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let g = Grammar::new_from_file(&test_file_path("grammars/balanced_parentheses.cfg"))?;
         assert!(matches!(ParseTable::new(g), Err(Error::GrammarNotSLR1(_))));
