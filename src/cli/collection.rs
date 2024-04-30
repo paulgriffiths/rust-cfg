@@ -7,7 +7,7 @@ use crate::parsers::InputSymbol;
 /// Outputs the canonical collection of simple LR items
 pub fn output(g: &Grammar) {
     let g = g.augment();
-    let collection = items::Collection::new(&g).collection;
+    let collection = items::Collection::new(&g).sets;
     let collection_len = collection.len();
 
     for (i, set) in collection.into_iter().enumerate() {

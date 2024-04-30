@@ -54,6 +54,12 @@ impl Item {
     pub fn is_end(&self, g: &Grammar) -> bool {
         self.dot == g.production(self.production).body.len()
     }
+
+    /// Returns true if the item is a kernel item. Kernel items include the
+    /// initial item [S' → ·S] and all items whose dots are not at the right.
+    pub fn is_kernel(&self, g: &Grammar) -> bool {
+        self.dot != 0 || g.production(self.production).head == g.start()
+    }
 }
 
 /// A hashable ItemSet, suitable for use in a HashSet of ItemSets
@@ -81,45 +87,66 @@ impl Hash for ItemStateSet {
 }
 
 /// A canonical collection of sets of LR(0) items for an augmented grammar,
-/// along with a calculated table of SHIFTs and GOTOs
+/// plus the GOTO transition table
 pub struct Collection {
-    pub collection: Vec<ItemSet>,
-    pub shifts_and_gotos: Vec<Vec<Option<usize>>>,
+    pub sets: Vec<ItemSet>,
+    pub goto: Vec<Vec<Option<usize>>>,
 }
 
 impl Collection {
     /// Returns the canonical collection of sets of LR(0) items for the given
     /// augmented grammar
     pub fn new(g: &Grammar) -> Collection {
-        canonical_collection(g)
+        // Algorithm adapted from Aho et al (2007) p.246
+
+        let mut builder = Builder::new(g);
+        let mut count = builder.len();
+        let mut processed = 0;
+
+        // Iterate until no new sets are added to the collection on a round
+        while count != processed {
+            // Iterate through the sets in the collection we haven't processed yet
+            for i in processed..count {
+                // For each relevant grammar symbol, add a new transition, creating
+                // a new set if necessary
+                for symbol in builder.nexts(g, i) {
+                    builder.add_transition(g, i, symbol);
+                }
+            }
+
+            processed = count;
+            count = builder.len();
+        }
+
+        Collection {
+            sets: builder.sets,
+            goto: builder.goto,
+        }
     }
 
-    /// Returns a copy of the collection with non-kernel items removed. The
-    /// SHIFTS and GOTOs are also emptied.
+    /// Returns a copy of the collection with non-kernel items removed.
     pub fn kernels(&self, g: &Grammar) -> Collection {
         let mut kernels: Vec<ItemSet> = Vec::new();
 
-        for c in &self.collection {
+        for c in &self.sets {
             kernels.push(ItemSet::from_iter(
-                c.iter()
-                    .filter(|s| s.dot != 0 || g.production(s.production).head == g.start())
-                    .cloned(),
+                c.iter().filter(|i| i.is_kernel(g)).cloned(),
             ));
         }
 
         Collection {
-            collection: kernels,
-            shifts_and_gotos: Vec::new(),
+            sets: kernels,
+            goto: self.goto.clone(),
         }
     }
 }
 
 /// A builder for a canonical collection of sets of LR(0) items for an
-/// augmented grammar, along with a calculated table of SHIFTs and GOTOs
+/// augmented grammar, along with a GOTO transition table
 struct Builder {
     sets: Vec<ItemSet>,
     seen: HashMap<ItemStateSet, usize>,
-    shifts: Vec<Vec<Option<usize>>>,
+    goto: Vec<Vec<Option<usize>>>,
 }
 
 impl Builder {
@@ -136,17 +163,25 @@ impl Builder {
         let mut seen: HashMap<ItemStateSet, usize> = HashMap::new();
         seen.insert(ItemStateSet(start_set.clone()), 0);
 
-        let shifts: Vec<Vec<Option<usize>>> = vec![vec![None; g.symbols().len()]];
+        let goto: Vec<Vec<Option<usize>>> = vec![vec![None; g.symbols().len()]];
 
-        Builder { sets, seen, shifts }
+        Builder { sets, seen, goto }
     }
 
-    /// Adds a SHIFT/GOTO from the given state to the given state on grammar
-    /// symbol with ID s
-    fn add_shift(&mut self, from: usize, to: usize, s: usize) {
-        match self.shifts[from][s] {
+    /// Adds an entry to the GOTO transition table
+    fn add_goto(&mut self, from: usize, to: usize, s: Symbol) {
+        // Get the ID of the symbol
+        let s = match s {
+            Symbol::Terminal(id) | Symbol::NonTerminal(id) => id,
+            Symbol::Empty => {
+                panic!("ϵ found in grammar symbols");
+            }
+        };
+
+        // Add a transition if one does not already exist for the same value
+        match self.goto[from][s] {
             None => {
-                self.shifts[from][s] = Some(to);
+                self.goto[from][s] = Some(to);
             }
             Some(i) if i == to => (),
             _ => {
@@ -156,14 +191,14 @@ impl Builder {
                 // state, so the same input symbol applies to
                 // the same set should never yield a different
                 // set.
-                panic!("conflict calculating shifts and gotos");
+                panic!("conflict calculating goto and gotos");
             }
         }
     }
 
-    /// Returns GOTO(i, s), where s is in nexts(i). If GOTO(i, s) is not
-    /// already in the collection of sets, it is added.
-    fn goto(&mut self, g: &Grammar, i: usize, s: Symbol) -> usize {
+    /// Adds a transition from set i on symbol s, adding a new set to the
+    /// collection if necessary.
+    fn add_transition(&mut self, g: &Grammar, i: usize, s: Symbol) {
         // Algorithm adapted from Aho et al (2007) p.246
 
         // GOTO(i, X) is defined to be the closure of the set of all items
@@ -181,17 +216,21 @@ impl Builder {
         }
 
         let state_set = ItemStateSet(goto.clone());
-        if let Some(idx) = self.seen.get(&state_set) {
-            // Just return the next set index if we've seen it before
-            *idx
-        } else {
-            // Otherwise add the set and return the new index
-            self.seen.insert(state_set, self.len());
-            self.sets.push(closure(g, &goto));
-            self.shifts.push(vec![None; g.symbols().len()]);
+        let j = {
+            if let Some(idx) = self.seen.get(&state_set) {
+                // Just return the set index if we've seen it before
+                *idx
+            } else {
+                // Otherwise add the new set and return its index
+                self.seen.insert(state_set, self.len());
+                self.goto.push(vec![None; g.symbols().len()]);
+                self.sets.push(closure(g, &goto));
 
-            self.len() - 1
-        }
+                self.len() - 1
+            }
+        };
+
+        self.add_goto(i, j, s);
     }
 
     /// Returns the number of sets currently in the collection
@@ -218,51 +257,6 @@ impl Builder {
         symbols.sort();
 
         symbols
-    }
-}
-
-/// Returns the canonical collection of sets of LR(0) items for the given
-/// augmented grammar
-fn canonical_collection(g: &Grammar) -> Collection {
-    // Algorithm adapted from Aho et al (2007) p.246
-
-    let mut builder = Builder::new(g);
-    let mut count = builder.len();
-    let mut processed = 0;
-
-    loop {
-        // Iterate through the sets in the collection we haven't processed yet
-        for i in processed..count {
-            // For each relevant grammar symbol, compute GOTO(i, symbol) and
-            // add it to the collection, if not already present
-            for symbol in builder.nexts(g, i) {
-                let j = builder.goto(g, i, symbol);
-
-                // Add a SHIFT/GOTO entry for the symbol, just because they're
-                // easy to calculate here while we're building the canonical
-                // collection, so we may as well save ourselves some work later
-                match symbol {
-                    Symbol::Terminal(id) | Symbol::NonTerminal(id) => {
-                        builder.add_shift(i, j, id);
-                    }
-                    Symbol::Empty => {
-                        panic!("ϵ found in grammar symbols");
-                    }
-                }
-            }
-        }
-
-        // Continue until no new sets are added to the collection on a round
-        processed = count;
-        count = builder.len();
-        if count == processed {
-            break;
-        }
-    }
-
-    Collection {
-        collection: builder.sets,
-        shifts_and_gotos: builder.shifts,
     }
 }
 
@@ -383,149 +377,176 @@ mod test {
     }
 
     #[test]
-    fn test_canonical_collection() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    fn test_collection_goto() -> std::result::Result<(), Box<dyn std::error::Error>> {
         // Grammar and test cases taken from Aho et al (2007) p.244
 
         let g = Grammar::new_from_file(&test_file_path("grammars/slr/expr_aug.cfg"))?;
 
-        let c = Collection::new(&g);
-        assert_eq!(c.collection.len(), 12);
-
-        // I0
-        let items = ItemSet::from([Item::new_production(0)]);
-        assert_closure(&c.collection[0], &items, &[1, 2, 3, 4, 5, 6]);
-        assert_eq!(c.shifts_and_gotos[0][g.terminal_index('+')], None);
-        assert_eq!(c.shifts_and_gotos[0][g.terminal_index('(')], Some(4));
-        assert_eq!(c.shifts_and_gotos[0][g.terminal_index('a')], Some(5));
-
-        // I1
-        let items = ItemSet::from([
-            Item {
-                dot: 1,
-                production: 0,
-            },
-            Item {
-                dot: 1,
-                production: 1,
-            },
-        ]);
-        assert_closure(&c.collection[1], &items, &[]);
-        assert_eq!(c.shifts_and_gotos[1][g.terminal_index('+')], Some(6));
-
-        // I2
-        let items = ItemSet::from([
-            Item {
-                dot: 1,
-                production: 2,
-            },
-            Item {
-                dot: 1,
-                production: 3,
-            },
-        ]);
-        assert_closure(&c.collection[2], &items, &[]);
-        assert_eq!(c.shifts_and_gotos[2][g.terminal_index('*')], Some(7));
-
-        // I3
-        let items = ItemSet::from([Item {
-            dot: 1,
-            production: 4,
-        }]);
-        assert_closure(&c.collection[3], &items, &[]);
-
-        // I4
-        let items = ItemSet::from([Item {
-            dot: 1,
-            production: 5,
-        }]);
-        assert_closure(&c.collection[4], &items, &[1, 2, 3, 4, 5, 6]);
-        assert_eq!(c.shifts_and_gotos[4][g.terminal_index('(')], Some(4));
-        assert_eq!(c.shifts_and_gotos[4][g.terminal_index('a')], Some(5));
-
-        // I5
-        let items = ItemSet::from([Item {
-            dot: 1,
-            production: 6,
-        }]);
-        assert_closure(&c.collection[5], &items, &[]);
-
-        // I6
-        let items = ItemSet::from([Item {
-            dot: 2,
-            production: 1,
-        }]);
-        assert_closure(&c.collection[6], &items, &[3, 4, 5, 6]);
-        assert_eq!(c.shifts_and_gotos[6][g.terminal_index('(')], Some(4));
-        assert_eq!(c.shifts_and_gotos[6][g.terminal_index('a')], Some(5));
-
-        // I7
-        let items = ItemSet::from([Item {
-            dot: 2,
-            production: 3,
-        }]);
-        assert_closure(&c.collection[7], &items, &[5, 6]);
-        assert_eq!(c.shifts_and_gotos[7][g.terminal_index('(')], Some(4));
-        assert_eq!(c.shifts_and_gotos[7][g.terminal_index('a')], Some(5));
-
-        // I8
-        let items = ItemSet::from([
-            Item {
-                dot: 1,
-                production: 1,
-            },
-            Item {
-                dot: 2,
-                production: 5,
-            },
-        ]);
-        assert_closure(&c.collection[8], &items, &[]);
-        assert_eq!(c.shifts_and_gotos[8][g.terminal_index('+')], Some(6));
-        assert_eq!(c.shifts_and_gotos[8][g.terminal_index(')')], Some(11));
-
-        // I9
-        let items = ItemSet::from([
-            Item {
-                dot: 3,
-                production: 1,
-            },
-            Item {
-                dot: 1,
-                production: 3,
-            },
-        ]);
-        assert_closure(&c.collection[9], &items, &[]);
-        assert_eq!(c.shifts_and_gotos[9][g.terminal_index('*')], Some(7));
-
-        // I10
-        let items = ItemSet::from([Item {
-            dot: 3,
-            production: 3,
-        }]);
-        assert_closure(&c.collection[10], &items, &[]);
-
-        // I11
-        let items = ItemSet::from([Item {
-            dot: 3,
-            production: 5,
-        }]);
-        assert_closure(&c.collection[11], &items, &[]);
+        assert_eq!(
+            Collection::new(&g).goto,
+            vec![
+                // I0
+                vec![
+                    None,    // E'
+                    Some(1), // E
+                    None,    // '+'
+                    Some(2), // T
+                    None,    // '*'
+                    Some(3), // F
+                    Some(4), // '('
+                    None,    // ')'
+                    Some(5), // 'a'
+                ],
+                // I1
+                vec![
+                    None,    // E'
+                    None,    // E
+                    Some(6), // '+'
+                    None,    // T
+                    None,    // '*'
+                    None,    // F
+                    None,    // '('
+                    None,    // ')'
+                    None,    // 'a'
+                ],
+                // I2
+                vec![
+                    None,    // E'
+                    None,    // E
+                    None,    // '+'
+                    None,    // T
+                    Some(7), // '*'
+                    None,    // F
+                    None,    // '('
+                    None,    // ')'
+                    None,    // 'a'
+                ],
+                // I3
+                vec![
+                    None, // E'
+                    None, // E
+                    None, // '+'
+                    None, // T
+                    None, // '*'
+                    None, // F
+                    None, // '('
+                    None, // ')'
+                    None, // 'a'
+                ],
+                // I4
+                vec![
+                    None,    // E'
+                    Some(8), // E
+                    None,    // '+'
+                    Some(2), // T
+                    None,    // '*'
+                    Some(3), // F
+                    Some(4), // '('
+                    None,    // ')'
+                    Some(5), // 'a'
+                ],
+                // I5
+                vec![
+                    None, // E'
+                    None, // E
+                    None, // '+'
+                    None, // T
+                    None, // '*'
+                    None, // F
+                    None, // '('
+                    None, // ')'
+                    None, // 'a'
+                ],
+                // I6
+                vec![
+                    None,    // E'
+                    None,    // E
+                    None,    // '+'
+                    Some(9), // T
+                    None,    // '*'
+                    Some(3), // F
+                    Some(4), // '('
+                    None,    // ')'
+                    Some(5), // 'a'
+                ],
+                // I7
+                vec![
+                    None,     // E'
+                    None,     // E
+                    None,     // '+'
+                    None,     // T
+                    None,     // '*'
+                    Some(10), // F
+                    Some(4),  // '('
+                    None,     // ')'
+                    Some(5),  // 'a'
+                ],
+                // I8
+                vec![
+                    None,     // E'
+                    None,     // E
+                    Some(6),  // '+'
+                    None,     // T
+                    None,     // '*'
+                    None,     // F
+                    None,     // '('
+                    Some(11), // ')'
+                    None,     // 'a'
+                ],
+                // I9
+                vec![
+                    None,    // E'
+                    None,    // E
+                    None,    // '+'
+                    None,    // T
+                    Some(7), // '*'
+                    None,    // F
+                    None,    // '('
+                    None,    // ')'
+                    None,    // 'a'
+                ],
+                // I10
+                vec![
+                    None, // E'
+                    None, // E
+                    None, // '+'
+                    None, // T
+                    None, // '*'
+                    None, // F
+                    None, // '('
+                    None, // ')'
+                    None, // 'a'
+                ],
+                // I11
+                vec![
+                    None, // E'
+                    None, // E
+                    None, // '+'
+                    None, // T
+                    None, // '*'
+                    None, // F
+                    None, // '('
+                    None, // ')'
+                    None, // 'a'
+                ],
+            ],
+        );
 
         Ok(())
     }
 
     #[test]
-    fn test_canonical_collection_kernals() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    fn test_collection_sets() -> std::result::Result<(), Box<dyn std::error::Error>> {
         // Grammar and test cases taken from Aho et al (2007) p.244
 
         let g = Grammar::new_from_file(&test_file_path("grammars/slr/expr_aug.cfg"))?;
 
-        let c = Collection::new(&g);
-        let kernels = c.kernels(&g);
-        assert_eq!(kernels.collection.len(), 12);
+        let s = Collection::new(&g).sets;
+        assert_eq!(s.len(), 12);
 
         // I0
         let items = ItemSet::from([Item::new_production(0)]);
-        assert_eq!(kernels.collection[0], items);
+        assert_closure(&s[0], &items, &[1, 2, 3, 4, 5, 6]);
 
         // I1
         let items = ItemSet::from([
@@ -538,7 +559,7 @@ mod test {
                 production: 1,
             },
         ]);
-        assert_eq!(kernels.collection[1], items);
+        assert_eq!(s[1], items);
 
         // I2
         let items = ItemSet::from([
@@ -551,42 +572,42 @@ mod test {
                 production: 3,
             },
         ]);
-        assert_eq!(kernels.collection[2], items);
+        assert_eq!(s[2], items);
 
         // I3
         let items = ItemSet::from([Item {
             dot: 1,
             production: 4,
         }]);
-        assert_eq!(kernels.collection[3], items);
+        assert_eq!(s[3], items);
 
         // I4
         let items = ItemSet::from([Item {
             dot: 1,
             production: 5,
         }]);
-        assert_eq!(kernels.collection[4], items);
+        assert_closure(&s[4], &items, &[1, 2, 3, 4, 5, 6]);
 
         // I5
         let items = ItemSet::from([Item {
             dot: 1,
             production: 6,
         }]);
-        assert_eq!(kernels.collection[5], items);
+        assert_eq!(s[5], items);
 
         // I6
         let items = ItemSet::from([Item {
             dot: 2,
             production: 1,
         }]);
-        assert_eq!(kernels.collection[6], items);
+        assert_closure(&s[6], &items, &[3, 4, 5, 6]);
 
         // I7
         let items = ItemSet::from([Item {
             dot: 2,
             production: 3,
         }]);
-        assert_eq!(kernels.collection[7], items);
+        assert_closure(&s[7], &items, &[5, 6]);
 
         // I8
         let items = ItemSet::from([
@@ -599,7 +620,7 @@ mod test {
                 production: 5,
             },
         ]);
-        assert_eq!(kernels.collection[8], items);
+        assert_eq!(s[8], items);
 
         // I9
         let items = ItemSet::from([
@@ -612,21 +633,138 @@ mod test {
                 production: 3,
             },
         ]);
-        assert_eq!(kernels.collection[9], items);
+        assert_eq!(s[9], items);
 
         // I10
         let items = ItemSet::from([Item {
             dot: 3,
             production: 3,
         }]);
-        assert_eq!(kernels.collection[10], items);
+        assert_eq!(s[10], items);
 
         // I11
         let items = ItemSet::from([Item {
             dot: 3,
             production: 5,
         }]);
-        assert_eq!(kernels.collection[11], items);
+        assert_eq!(s[11], items);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_collection_kernels() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        // Grammar and test cases taken from Aho et al (2007) p.244
+
+        let g = Grammar::new_from_file(&test_file_path("grammars/slr/expr_aug.cfg"))?;
+
+        let s = Collection::new(&g).kernels(&g).sets;
+        assert_eq!(s.len(), 12);
+
+        // I0
+        let items = ItemSet::from([Item::new_production(0)]);
+        assert_eq!(s[0], items);
+
+        // I1
+        let items = ItemSet::from([
+            Item {
+                dot: 1,
+                production: 0,
+            },
+            Item {
+                dot: 1,
+                production: 1,
+            },
+        ]);
+        assert_eq!(s[1], items);
+
+        // I2
+        let items = ItemSet::from([
+            Item {
+                dot: 1,
+                production: 2,
+            },
+            Item {
+                dot: 1,
+                production: 3,
+            },
+        ]);
+        assert_eq!(s[2], items);
+
+        // I3
+        let items = ItemSet::from([Item {
+            dot: 1,
+            production: 4,
+        }]);
+        assert_eq!(s[3], items);
+
+        // I4
+        let items = ItemSet::from([Item {
+            dot: 1,
+            production: 5,
+        }]);
+        assert_eq!(s[4], items);
+
+        // I5
+        let items = ItemSet::from([Item {
+            dot: 1,
+            production: 6,
+        }]);
+        assert_eq!(s[5], items);
+
+        // I6
+        let items = ItemSet::from([Item {
+            dot: 2,
+            production: 1,
+        }]);
+        assert_eq!(s[6], items);
+
+        // I7
+        let items = ItemSet::from([Item {
+            dot: 2,
+            production: 3,
+        }]);
+        assert_eq!(s[7], items);
+
+        // I8
+        let items = ItemSet::from([
+            Item {
+                dot: 1,
+                production: 1,
+            },
+            Item {
+                dot: 2,
+                production: 5,
+            },
+        ]);
+        assert_eq!(s[8], items);
+
+        // I9
+        let items = ItemSet::from([
+            Item {
+                dot: 3,
+                production: 1,
+            },
+            Item {
+                dot: 1,
+                production: 3,
+            },
+        ]);
+        assert_eq!(s[9], items);
+
+        // I10
+        let items = ItemSet::from([Item {
+            dot: 3,
+            production: 3,
+        }]);
+        assert_eq!(s[10], items);
+
+        // I11
+        let items = ItemSet::from([Item {
+            dot: 3,
+            production: 5,
+        }]);
+        assert_eq!(s[11], items);
 
         Ok(())
     }

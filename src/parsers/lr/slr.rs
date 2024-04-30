@@ -38,8 +38,8 @@ impl ParseTable {
         // same table for efficiency, since the sets of terminal IDs and
         // non-terminal IDs are distinct
         let collection = Collection::new(&grammar);
-        let mut actions: Vec<Vec<TableEntry>> = Vec::with_capacity(collection.collection.len());
-        for _ in 0..collection.collection.len() {
+        let mut actions: Vec<Vec<TableEntry>> = Vec::with_capacity(collection.sets.len());
+        for _ in 0..collection.sets.len() {
             // Add a table row for each state, pre-populated with error actions
             actions.push(vec![TableEntry::Error; eof_index + 1]);
         }
@@ -51,16 +51,16 @@ impl ParseTable {
         };
 
         // Add previously calculated GOTOs for non-terminals
-        for state in 0..collection.shifts_and_gotos.len() {
+        for state in 0..collection.goto.len() {
             for &i in table.grammar.non_terminal_ids() {
-                if let Some(to) = collection.shifts_and_gotos[state][i] {
+                if let Some(to) = collection.goto[state][i] {
                     table.actions[state][i] = TableEntry::Goto(to);
                 }
             }
         }
 
         // Add SHIFT and REDUCE actions for terminals and end-of-input
-        for (state, items) in collection.collection.iter().enumerate() {
+        for (state, items) in collection.sets.iter().enumerate() {
             for item in items {
                 if item.is_end(&table.grammar) {
                     table.add_reductions(state, item.production)?;
@@ -68,7 +68,7 @@ impl ParseTable {
                     table.grammar.production(item.production).body[item.dot]
                 {
                     // Retrieve previously calculated SHIFT
-                    table.add_shift(state, collection.shifts_and_gotos[state][t].unwrap(), t)?;
+                    table.add_shift(state, collection.goto[state][t].unwrap(), t)?;
                 }
             }
         }

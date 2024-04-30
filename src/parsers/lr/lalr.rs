@@ -309,15 +309,15 @@ impl LookaheadsTable {
 
         // Create a map from the LR(0) items for easy calculation of GOTO(I, X)
         let mut state_set: HashMap<ItemStateSet, usize> = HashMap::new();
-        for (i, k) in collection.collection.iter().enumerate() {
+        for (i, k) in collection.sets.iter().enumerate() {
             state_set.insert(ItemStateSet(k.clone()), i);
         }
 
         // We need to refer to individual LR(0) items deterministically, so decant
         // them from the set into a vector of vectors
-        let mut items: Vec<Vec<Item>> = Vec::with_capacity(kernels.collection.len());
-        for i in 0..kernels.collection.len() {
-            items.push(kernels.collection[i].iter().cloned().collect());
+        let mut items: Vec<Vec<Item>> = Vec::with_capacity(kernels.sets.len());
+        for i in 0..kernels.sets.len() {
+            items.push(kernels.sets[i].iter().cloned().collect());
         }
 
         // For each LR(0) item, we need to build a table that includes lookaheads
@@ -367,7 +367,7 @@ impl LookaheadsTable {
                     let goto = *state_set
                         .get(&ItemStateSet(items::goto(
                             g,
-                            &collection.collection[state],
+                            &collection.sets[state],
                             g.production(item.production).body[item.dot],
                         )))
                         .unwrap();
