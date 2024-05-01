@@ -15,12 +15,9 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let g = Grammar::new_from_file(&cli.grammar)?;
 
     match &cli.command {
-        Some(Commands::CanonicalCollection {
-            canonical,
-            lookahead,
-        }) => {
-            if *canonical || *lookahead {
-                collection::output_canonical(&g, *lookahead);
+        Some(Commands::CanonicalSets { lr1, lalr }) => {
+            if *lr1 || *lalr {
+                collection::output_canonical(&g, *lalr);
             } else {
                 collection::output(&g);
             }

@@ -15,13 +15,13 @@ pub struct Options {
 /// Commands for the cfg tool
 pub enum Commands {
     /// Output the canonical collection of sets of LR items
-    CanonicalCollection {
-        #[arg(short, long)]
+    CanonicalSets {
+        #[arg(long)]
         /// Output sets of LR(1) items (default is LR(0))
-        canonical: bool,
-        #[arg(short, long)]
+        lr1: bool,
+        #[arg(long)]
         /// Output sets of LALR(1) items (default is LR(0))
-        lookahead: bool,
+        lalr: bool,
     },
     /// Output a derivation of a sentence
     Derive {
