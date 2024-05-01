@@ -64,7 +64,7 @@ pub fn output_canonical(g: &Grammar, lalr: bool) {
         if lalr {
             lalr::lalr_collection(&g)
         } else {
-            lritems::Collection::new(&g).collection
+            lritems::Collection::new(&g).sets
         }
     };
     let collection_len = collection.len();

@@ -63,6 +63,42 @@ impl LRItem {
     pub fn is_end(&self, g: &Grammar) -> bool {
         self.dot == g.production(self.production).body.len()
     }
+
+    /// Returns true if the item is a kernel item. Kernel items include the
+    /// initial item [S' → ·S,$] and all items whose dots are not at the right.
+    pub fn is_kernel(&self, g: &Grammar) -> bool {
+        self.dot != 0 || g.production(self.production).head == g.start()
+    }
+
+    /// Returns true if the item is the start item and the dot is at the right
+    pub fn is_start(&self, g: &Grammar) -> bool {
+        self.is_end(g) && g.production(self.production).head == g.start()
+    }
+
+    /// Returns the symbol after the dot, or None if the dot is at the right.
+    /// If include_e is false, ϵ-productions will always return None.
+    pub fn next_symbol(&self, g: &Grammar, include_e: bool) -> Option<Symbol> {
+        if self.is_end(g) {
+            None
+        } else {
+            let s = g.production(self.production).body[self.dot];
+            if s == Symbol::Empty && !include_e {
+                None
+            } else {
+                Some(s)
+            }
+        }
+    }
+
+    /// Returns true if symbol s follows the dot in the item. Always returns
+    /// false for ϵ-productions.
+    pub fn next_symbol_is(&self, g: &Grammar, s: Symbol) -> bool {
+        if let Some(next) = self.next_symbol(g, false) {
+            next == s
+        } else {
+            false
+        }
+    }
 }
 
 /// A hashable LRItemSet, suitable for use in a HashSet of LRItemSets
@@ -92,97 +128,148 @@ impl Hash for LRItemStateSet {
 /// A canonical collection of sets of LR(1) items for an augmented grammar,
 /// along with a calculated table of SHIFTs and GOTOs
 pub struct Collection {
-    pub collection: Vec<LRItemSet>,
-    pub shifts_and_gotos: Vec<Vec<Option<usize>>>,
+    pub sets: Vec<LRItemSet>,
+    pub goto: Vec<Vec<Option<usize>>>,
 }
 
 impl Collection {
     /// Returns the canonical collection of sets of LR(1) items for the given
     /// augmented grammar
     pub fn new(g: &Grammar) -> Collection {
-        canonical_collection(g)
+        // Algorithm adapted from Aho et al (2007) p.246
+
+        let mut builder = Builder::new(g);
+        let mut count = builder.len();
+        let mut processed = 0;
+
+        // Iterate until no new sets are added to the collection on a round
+        while count != processed {
+            for i in processed..count {
+                for symbol in builder.nexts(i) {
+                    builder.add_transition(i, symbol);
+                }
+            }
+
+            processed = count;
+            count = builder.len();
+        }
+
+        Collection {
+            sets: builder.sets,
+            goto: builder.goto,
+        }
     }
 }
 
-/// Returns the canonical collection of sets of LR(1) items for the given
-/// augmented grammar
-fn canonical_collection(g: &Grammar) -> Collection {
-    // Algorithm adapted from Aho et al (2007) p.261
+/// A builder for a canonical collection of sets of LR(1) items for an
+/// augmented grammar, along with a GOTO transition table
+struct Builder<'b> {
+    g: &'b Grammar,
+    sets: Vec<LRItemSet>,
+    goto: Vec<Vec<Option<usize>>>,
+    seen: HashMap<LRItemStateSet, usize>,
+}
 
-    let start_set = LRItemSet::from([LRItem::new_production(
-        g.productions_for_non_terminal(g.start())[0],
-        InputSymbol::EndOfInput,
-    )]);
+impl Builder<'_> {
+    /// Returns a new LR(1) canonical collection builder
+    fn new(g: &Grammar) -> Builder {
+        // Initialize collection with CLOSURE(S' → ·S,$)
+        let start_set = LRItemSet::from([LRItem::new_production(
+            g.productions_for_non_terminal(g.start())[0],
+            InputSymbol::EndOfInput,
+        )]);
+        let sets: Vec<LRItemSet> = vec![closure(g, &start_set)];
 
-    // Initialize collection with CLOSURE([S' → ·S, $])
-    let mut collection: Vec<LRItemSet> = vec![closure(g, &start_set)];
+        // Store kernel items for sets we've already seen, so we can easily
+        // retrieve their indexes
+        let mut seen: HashMap<LRItemStateSet, usize> = HashMap::new();
+        seen.insert(LRItemStateSet(start_set.clone()), 0);
 
-    let mut seen: HashMap<LRItemStateSet, usize> = HashMap::new();
-    seen.insert(LRItemStateSet(start_set.clone()), 0);
+        let goto: Vec<Vec<Option<usize>>> = vec![vec![None; g.symbols().len()]];
 
-    let mut shifts_and_gotos: Vec<Vec<Option<usize>>> = Vec::new();
-    shifts_and_gotos.push(vec![None; g.symbols().len()]);
-
-    let mut count = collection.len();
-    let mut processed = 0;
-    loop {
-        // Iterate through all the sets in the collection we haven't processed
-        // yet
-        for i in processed..count {
-            // For each grammar symbol X, if GOTO(i, X) is not empty and not
-            // already in the collection, add it to the collection
-            for symbol in g.symbols() {
-                let set = goto(g, &collection[i], *symbol);
-                if set.is_empty() {
-                    continue;
-                }
-
-                let state_set = LRItemStateSet(set.clone());
-                let set_index = if let Some(idx) = seen.get(&state_set) {
-                    // Just return the next set index if we've seen it before
-                    *idx
-                } else {
-                    // Otherwise add the set and return the new index
-                    collection.push(set);
-                    seen.insert(state_set, collection.len() - 1);
-                    shifts_and_gotos.push(vec![None; g.symbols().len()]);
-
-                    collection.len() - 1
-                };
-
-                // Add a SHIFT/GOTO entry for the symbol, just because they're
-                // easy to calculate here while we're building the canonical
-                // collection, so we may as well save ourselves some work later
-                let id = symbol.id();
-                match shifts_and_gotos[i][id] {
-                    None => {
-                        shifts_and_gotos[i][id] = Some(set_index);
-                    }
-                    Some(i) if i == set_index => (),
-                    _ => {
-                        // We shouldn't get a conflict as each set is
-                        // defined as the set of items which can be
-                        // generated on an input symbol from a previous
-                        // state, so the same input symbol applies to
-                        // the same set should never yield a different
-                        // set.
-                        panic!("conflict calculating shifts and gotos");
-                    }
-                }
-            }
-        }
-
-        // Continue until no new sets are added to the collection on a round
-        processed = count;
-        count = collection.len();
-        if count == processed {
-            break;
+        Builder {
+            g,
+            sets,
+            seen,
+            goto,
         }
     }
 
-    Collection {
-        collection,
-        shifts_and_gotos,
+    /// Adds an entry to the GOTO transition table.
+    fn add_goto(&mut self, i: usize, to: usize, s: Symbol) {
+        // Add a transition if one does not already exist for the same value
+        let s = s.id();
+        match self.goto[i][s] {
+            None => {
+                self.goto[i][s] = Some(to);
+            }
+            Some(current) if current == to => (),
+            _ => {
+                // We shouldn't get a conflict as each set is defined as the
+                // set of items which can be generated on an input symbol from
+                // a previous state, so the same input symbol applies to the
+                // same set should never yield a different set.
+                panic!("conflict calculating goto and gotos");
+            }
+        }
+    }
+
+    /// Adds a transition from set i on symbol s, adding a new set to the
+    /// collection if necessary.
+    fn add_transition(&mut self, i: usize, s: Symbol) {
+        // Algorithm adapted from Aho et al (2007) p.261
+
+        // GOTO(items) is defined to be the closure of the set of all items
+        // [A → 𝛼X·𝛽,a] such that [A → 𝛼·X𝛽,a] is in items.
+        let mut goto = LRItemSet::new();
+        for item in &self.sets[i] {
+            if item.next_symbol_is(self.g, s) {
+                goto.insert(item.advance());
+            }
+        }
+
+        // If the set is empty, s was not in nexts(i), so panic
+        if goto.is_empty() {
+            panic!("goto is empty");
+        }
+
+        let state_set = LRItemStateSet(goto.clone());
+        let j = if let Some(j) = self.seen.get(&state_set) {
+            // Just return the set index if we've seen it before
+            *j
+        } else {
+            // Otherwise add the new set and return its index
+            self.seen.insert(state_set, self.len());
+            self.goto.push(vec![None; self.g.symbols().len()]);
+            self.sets.push(closure(self.g, &goto));
+
+            self.len() - 1
+        };
+
+        self.add_goto(i, j, s);
+    }
+
+    /// Returns the number of sets currently in the collection
+    fn len(&self) -> usize {
+        self.sets.len()
+    }
+
+    /// Returns a vector of grammar symbols (excluding ϵ) which appear after
+    /// the dots in each of the items in set i
+    fn nexts(&self, i: usize) -> Vec<Symbol> {
+        // Collect symbols into a set to eliminate duplicates
+        let mut symbols: HashSet<Symbol> = HashSet::new();
+        for item in &self.sets[i] {
+            if let Some(s) = item.next_symbol(self.g, false) {
+                symbols.insert(s);
+            }
+        }
+
+        // Return a sorted vector for predictable behavior
+        let mut symbols: Vec<_> = symbols.into_iter().collect();
+        symbols.sort();
+
+        symbols
     }
 }
 
@@ -198,30 +285,27 @@ pub fn closure(g: &Grammar, items: &LRItemSet) -> LRItemSet {
         closure.insert(*item);
     }
 
-    // If [A → 𝛼·B𝛽, a] is in CLOSURE(items) and B → 𝛾 is a production, then add
-    // the item [B → ·𝛾, b] for every terminal b in FIRST(𝛽a) to CLOSURE(items)
+    // If [A → 𝛼·B𝛽,a] is in CLOSURE(items) and B → 𝛾 is a production, then add
+    // the item [B → ·𝛾,b] for every terminal b in FIRST(𝛽a) to CLOSURE(items)
     // if it is not already there. Apply this rule until no more new items can
     // be added to CLOSURE(items).
     let mut count = closure.len();
     loop {
         // Iterate through all items currently in CLOSURE(items)
         for item in Vec::from_iter(closure.clone()) {
-            if !item.is_end(g) {
-                // Continue if we don't have a non-terminal or ϵ after the dot
-                if matches!(
-                    g.production(item.production).body[item.dot],
-                    Symbol::Terminal(_)
-                ) {
+            if let Some(symbol) = item.next_symbol(g, true) {
+                // Terminals after the dot don't add items to the closure
+                if matches!(symbol, Symbol::Terminal(_)) {
                     continue;
                 }
 
-                // If the item is [A → 𝛼·B𝛽, a], compute FIRST(𝛽a)
+                // If the item is [A → 𝛼·B𝛽,a], compute FIRST(𝛽a)
                 let beta = g.production(item.production).body[(item.dot + 1)..].to_vec();
                 let firsts = if beta.is_empty() {
                     // If 𝛽 is empty, then FIRST(𝛽a) is just {a}
                     vec![item.lookahead]
                 } else {
-                    // Calculate FIRST(𝛽)
+                    // Compute FIRST(𝛽)
                     let (firsts, contains_e) = g.first(&beta[..], false);
                     let mut firsts: Vec<_> = firsts.into_iter().map(InputSymbol::from).collect();
 
@@ -234,15 +318,15 @@ pub fn closure(g: &Grammar, items: &LRItemSet) -> LRItemSet {
                 };
 
                 for first in firsts {
-                    match g.production(item.production).body[item.dot] {
+                    match symbol {
                         Symbol::NonTerminal(nt) => {
-                            // If there is a non-terminal B, add [B → ·𝛾, b] for each
+                            // If there is a non-terminal B, add [B → ·𝛾,b] for each
                             // b in FIRST(𝛽a) to CLOSURE(items) for all productions
                             // of B if we haven't previously added the productions
                             // for (B, b)
                             if !seen.contains(&(nt, first)) {
-                                for production in g.productions_for_non_terminal(nt) {
-                                    closure.insert(LRItem::new_production(*production, first));
+                                for p in g.productions_for_non_terminal(nt) {
+                                    closure.insert(LRItem::new_production(*p, first));
                                 }
                                 seen.insert((nt, first));
                             }
@@ -338,18 +422,113 @@ mod test {
     }
 
     #[test]
-    fn test_canonical_collection() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    fn test_collection_goto() -> std::result::Result<(), Box<dyn std::error::Error>> {
         // Grammar and test cases taken from Aho et al (2007) p.263
 
         let g = Grammar::new_from_file(&test_file_path("grammars/clr/grammar_aug.cfg"))?;
 
-        let c = Collection::new(&g);
-        assert_eq!(c.collection.len(), 10);
+        assert_eq!(
+            Collection::new(&g).goto,
+            vec![
+                // I0
+                vec![
+                    None,    // S'
+                    Some(1), // S
+                    Some(2), // C
+                    Some(3), // 'c'
+                    Some(4), // 'd'
+                ],
+                // I1
+                vec![
+                    None, // S'
+                    None, // S
+                    None, // C
+                    None, // 'c'
+                    None, // 'd'
+                ],
+                // I2
+                vec![
+                    None,    // S'
+                    None,    // S
+                    Some(5), // C
+                    Some(6), // 'c'
+                    Some(7), // 'd'
+                ],
+                // I3
+                vec![
+                    None,    // S'
+                    None,    // S
+                    Some(8), // C
+                    Some(3), // 'c'
+                    Some(4), // 'd'
+                ],
+                // I4
+                vec![
+                    None, // S'
+                    None, // S
+                    None, // C
+                    None, // 'c'
+                    None, // 'd'
+                ],
+                // I5
+                vec![
+                    None, // S'
+                    None, // S
+                    None, // C
+                    None, // 'c'
+                    None, // 'd'
+                ],
+                // I6
+                vec![
+                    None,    // S'
+                    None,    // S
+                    Some(9), // C
+                    Some(6), // 'c'
+                    Some(7), // 'd'
+                ],
+                // I7
+                vec![
+                    None, // S'
+                    None, // S
+                    None, // C
+                    None, // 'c'
+                    None, // 'd'
+                ],
+                // I8
+                vec![
+                    None, // S'
+                    None, // S
+                    None, // C
+                    None, // 'c'
+                    None, // 'd'
+                ],
+                // I9
+                vec![
+                    None, // S'
+                    None, // S
+                    None, // C
+                    None, // 'c'
+                    None, // 'd'
+                ],
+            ]
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_collection_sets() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        // Grammar and test cases taken from Aho et al (2007) p.263
+
+        let g = Grammar::new_from_file(&test_file_path("grammars/clr/grammar_aug.cfg"))?;
+
+        let s = Collection::new(&g).sets;
+        assert_eq!(s.len(), 10);
 
         // I0
         let items = LRItemSet::from([LRItem::new_production(0, InputSymbol::EndOfInput)]);
         assert_closure(
-            &c.collection[0],
+            &s[0],
             &items,
             &[
                 (1, InputSymbol::EndOfInput),
@@ -359,11 +538,6 @@ mod test {
                 (3, InputSymbol::Character('d')),
             ],
         );
-        assert_eq!(c.shifts_and_gotos[0][0], None);
-        assert_eq!(c.shifts_and_gotos[0][1], Some(1));
-        assert_eq!(c.shifts_and_gotos[0][2], Some(2));
-        assert_eq!(c.shifts_and_gotos[0][g.terminal_index('c')], Some(3));
-        assert_eq!(c.shifts_and_gotos[0][g.terminal_index('d')], Some(4));
 
         // I1
         let items = LRItemSet::from([LRItem {
@@ -371,12 +545,7 @@ mod test {
             dot: 1,
             lookahead: InputSymbol::EndOfInput,
         }]);
-        assert_closure(&c.collection[1], &items, &[]);
-        assert_eq!(c.shifts_and_gotos[1][0], None);
-        assert_eq!(c.shifts_and_gotos[1][1], None);
-        assert_eq!(c.shifts_and_gotos[1][2], None);
-        assert_eq!(c.shifts_and_gotos[1][g.terminal_index('c')], None);
-        assert_eq!(c.shifts_and_gotos[1][g.terminal_index('d')], None);
+        assert_eq!(s[1], items);
 
         // I2
         let items = LRItemSet::from([LRItem {
@@ -385,15 +554,10 @@ mod test {
             lookahead: InputSymbol::EndOfInput,
         }]);
         assert_closure(
-            &c.collection[2],
+            &s[2],
             &items,
             &[(2, InputSymbol::EndOfInput), (3, InputSymbol::EndOfInput)],
         );
-        assert_eq!(c.shifts_and_gotos[2][0], None);
-        assert_eq!(c.shifts_and_gotos[2][1], None);
-        assert_eq!(c.shifts_and_gotos[2][2], Some(5));
-        assert_eq!(c.shifts_and_gotos[2][g.terminal_index('c')], Some(6));
-        assert_eq!(c.shifts_and_gotos[2][g.terminal_index('d')], Some(7));
 
         // I3
         let items = LRItemSet::from([
@@ -409,7 +573,7 @@ mod test {
             },
         ]);
         assert_closure(
-            &c.collection[3],
+            &s[3],
             &items,
             &[
                 (2, InputSymbol::Character('c')),
@@ -418,11 +582,6 @@ mod test {
                 (3, InputSymbol::Character('d')),
             ],
         );
-        assert_eq!(c.shifts_and_gotos[3][0], None);
-        assert_eq!(c.shifts_and_gotos[3][1], None);
-        assert_eq!(c.shifts_and_gotos[3][2], Some(8));
-        assert_eq!(c.shifts_and_gotos[3][g.terminal_index('c')], Some(3));
-        assert_eq!(c.shifts_and_gotos[3][g.terminal_index('d')], Some(4));
 
         // I4
         let items = LRItemSet::from([
@@ -437,12 +596,7 @@ mod test {
                 lookahead: InputSymbol::Character('d'),
             },
         ]);
-        assert_closure(&c.collection[4], &items, &[]);
-        assert_eq!(c.shifts_and_gotos[4][0], None);
-        assert_eq!(c.shifts_and_gotos[4][1], None);
-        assert_eq!(c.shifts_and_gotos[4][2], None);
-        assert_eq!(c.shifts_and_gotos[4][g.terminal_index('c')], None);
-        assert_eq!(c.shifts_and_gotos[4][g.terminal_index('d')], None);
+        assert_eq!(s[4], items);
 
         // I5
         let items = LRItemSet::from([LRItem {
@@ -450,12 +604,7 @@ mod test {
             dot: 2,
             lookahead: InputSymbol::EndOfInput,
         }]);
-        assert_closure(&c.collection[5], &items, &[]);
-        assert_eq!(c.shifts_and_gotos[5][0], None);
-        assert_eq!(c.shifts_and_gotos[5][1], None);
-        assert_eq!(c.shifts_and_gotos[5][2], None);
-        assert_eq!(c.shifts_and_gotos[5][g.terminal_index('c')], None);
-        assert_eq!(c.shifts_and_gotos[5][g.terminal_index('d')], None);
+        assert_eq!(s[5], items);
 
         // I6
         let items = LRItemSet::from([LRItem {
@@ -464,15 +613,10 @@ mod test {
             lookahead: InputSymbol::EndOfInput,
         }]);
         assert_closure(
-            &c.collection[6],
+            &s[6],
             &items,
             &[(2, InputSymbol::EndOfInput), (3, InputSymbol::EndOfInput)],
         );
-        assert_eq!(c.shifts_and_gotos[6][0], None);
-        assert_eq!(c.shifts_and_gotos[6][1], None);
-        assert_eq!(c.shifts_and_gotos[6][2], Some(9));
-        assert_eq!(c.shifts_and_gotos[6][g.terminal_index('c')], Some(6));
-        assert_eq!(c.shifts_and_gotos[6][g.terminal_index('d')], Some(7));
 
         // I7
         let items = LRItemSet::from([LRItem {
@@ -480,12 +624,7 @@ mod test {
             dot: 1,
             lookahead: InputSymbol::EndOfInput,
         }]);
-        assert_closure(&c.collection[7], &items, &[]);
-        assert_eq!(c.shifts_and_gotos[7][0], None);
-        assert_eq!(c.shifts_and_gotos[7][1], None);
-        assert_eq!(c.shifts_and_gotos[7][2], None);
-        assert_eq!(c.shifts_and_gotos[7][g.terminal_index('c')], None);
-        assert_eq!(c.shifts_and_gotos[7][g.terminal_index('d')], None);
+        assert_eq!(s[7], items);
 
         // I8
         let items = LRItemSet::from([
@@ -500,12 +639,7 @@ mod test {
                 lookahead: InputSymbol::Character('d'),
             },
         ]);
-        assert_closure(&c.collection[8], &items, &[]);
-        assert_eq!(c.shifts_and_gotos[8][0], None);
-        assert_eq!(c.shifts_and_gotos[8][1], None);
-        assert_eq!(c.shifts_and_gotos[8][2], None);
-        assert_eq!(c.shifts_and_gotos[8][g.terminal_index('c')], None);
-        assert_eq!(c.shifts_and_gotos[8][g.terminal_index('d')], None);
+        assert_eq!(s[8], items);
 
         // I9
         let items = LRItemSet::from([LRItem {
@@ -513,12 +647,7 @@ mod test {
             dot: 2,
             lookahead: InputSymbol::EndOfInput,
         }]);
-        assert_closure(&c.collection[9], &items, &[]);
-        assert_eq!(c.shifts_and_gotos[9][0], None);
-        assert_eq!(c.shifts_and_gotos[9][1], None);
-        assert_eq!(c.shifts_and_gotos[9][2], None);
-        assert_eq!(c.shifts_and_gotos[9][g.terminal_index('c')], None);
-        assert_eq!(c.shifts_and_gotos[9][g.terminal_index('d')], None);
+        assert_eq!(s[9], items);
 
         Ok(())
     }

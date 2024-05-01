@@ -61,6 +61,11 @@ impl Item {
         self.dot != 0 || g.production(self.production).head == g.start()
     }
 
+    /// Returns true if the item is the start item and the dot is at the right
+    pub fn is_start(&self, g: &Grammar) -> bool {
+        self.is_end(g) && g.production(self.production).head == g.start()
+    }
+
     /// Returns the symbol after the dot, or None if the dot is at the right.
     /// If include_e is false, ϵ-productions will always return None.
     pub fn next_symbol(&self, g: &Grammar, include_e: bool) -> Option<Symbol> {

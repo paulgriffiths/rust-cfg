@@ -1,4 +1,4 @@
-use super::items::Collection;
+use super::items::{Collection, Item};
 use super::InputSymbol;
 use super::{PTable, TableEntry};
 use crate::errors::{Error, Result};
@@ -69,7 +69,7 @@ impl ParseTable {
         for (state, items) in collection.sets.iter().enumerate() {
             for item in items {
                 if item.is_end(&table.grammar) {
-                    table.add_reductions(state, item.production)?;
+                    table.add_reductions(state, item)?;
                 }
             }
         }
@@ -80,14 +80,17 @@ impl ParseTable {
     /// Adds a REDUCE production p entry for the given state to the table for
     /// every element of FOLLOW(p). If p is for the augmented start symbol,
     /// add an ACCEPT entry instead.
-    fn add_reductions(&mut self, from: usize, p: usize) -> Result<()> {
+    fn add_reductions(&mut self, from: usize, item: &Item) -> Result<()> {
         // If [A → 𝛼·] is in Ii where i is not the start state, then set
         // ACTION[i, a] to "reduce A → 𝛼" for all a in FOLLOW(A). If
         // [S' → S·] is in Ii where S' is the start symbol, then set
         // ACTION[i, a] to "accept", where a is the end-of-input marker.
-        for item in self.grammar.follow(self.grammar.production(p).head) {
+        for follow in self
+            .grammar
+            .follow(self.grammar.production(item.production).head)
+        {
             // Calculate the table column for the terminal/end-of-input
-            let i = match item {
+            let i = match follow {
                 FollowItem::Character(c) => self.grammar.terminal_index(c),
                 FollowItem::EndOfInput => self.eof_index,
             };
@@ -100,22 +103,22 @@ impl ParseTable {
                             "conflict between REDUCE({}) and ACCEPT ",
                             "for state {} on input character '{}'"
                         ),
-                        self.grammar.format_production(p),
+                        self.grammar.format_production(item.production),
                         from,
-                        InputSymbol::from(item),
+                        InputSymbol::from(follow),
                     )));
                 }
                 TableEntry::Reduce(r) => {
-                    if r != p {
+                    if r != item.production {
                         return Err(Error::GrammarNotSLR1(format!(
                             concat!(
                                 "conflict between REDUCE({}) and REDUCE({}) ",
                                 "for state {} on input character '{}'"
                             ),
-                            self.grammar.format_production(p),
+                            self.grammar.format_production(item.production),
                             self.grammar.format_production(r),
                             from,
-                            InputSymbol::from(item),
+                            InputSymbol::from(follow),
                         )));
                     }
                 }
@@ -125,10 +128,10 @@ impl ParseTable {
                             "conflict between REDUCE({}) and SHIFT({}) ",
                             "for state {} on input character '{}'"
                         ),
-                        self.grammar.format_production(p),
+                        self.grammar.format_production(item.production),
                         s,
                         from,
-                        InputSymbol::from(item),
+                        InputSymbol::from(follow),
                     )));
                 }
                 // Shouldn't happen, since GOTO is for non-terminals, and
@@ -139,22 +142,21 @@ impl ParseTable {
                             "conflict between REDUCE({}) and GOTO ({}) ",
                             "for state {} on input character '{}'",
                         ),
-                        self.grammar.format_production(p),
+                        self.grammar.format_production(item.production),
                         s,
                         from,
-                        InputSymbol::from(item),
+                        InputSymbol::from(follow),
                     )));
                 }
                 // Table entry was not previously set, so set it
                 TableEntry::Error => {
                     // Add ACCEPT to the table if the production head is the
                     // (augmented) start symbol, otherwise add REDUCE
-                    self.actions[from][i] =
-                        if self.grammar.production(p).head == self.grammar.start() {
-                            TableEntry::Accept
-                        } else {
-                            TableEntry::Reduce(p)
-                        };
+                    self.actions[from][i] = if item.is_start(&self.grammar) {
+                        TableEntry::Accept
+                    } else {
+                        TableEntry::Reduce(item.production)
+                    };
                 }
             }
         }
@@ -341,8 +343,6 @@ mod test {
 
     #[test]
     fn test_parse_table_action() -> std::result::Result<(), Box<dyn std::error::Error>> {
-        // Grammar taken from Aho et al (2007) p.244, test cases from p.252
-
         let g = Grammar::new_from_file(&test_file_path("grammars/slr/expr_aug.cfg"))?;
         let table = ParseTable::new(g)?;
 
