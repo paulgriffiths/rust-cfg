@@ -66,6 +66,13 @@ impl From<FollowItem> for InputSymbol {
     }
 }
 
+impl InputSymbol {
+    /// Returns true if the symbol is the null character
+    pub fn is_null(&self) -> bool {
+        *self == InputSymbol::Character(0 as char)
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;

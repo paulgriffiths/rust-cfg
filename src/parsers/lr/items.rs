@@ -1,3 +1,4 @@
+use super::lritems::LRItem;
 use crate::grammar::{Grammar, Symbol};
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
@@ -21,6 +22,16 @@ impl Ord for Item {
 impl PartialOrd for Item {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
+    }
+}
+
+impl From<&LRItem> for Item {
+    /// Returns an Item generated from an LRItem with the lookahead dropped
+    fn from(item: &LRItem) -> Self {
+        Self {
+            dot: item.dot,
+            production: item.production,
+        }
     }
 }
 

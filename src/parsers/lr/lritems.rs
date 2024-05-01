@@ -1,3 +1,4 @@
+use super::items::Item;
 use super::InputSymbol;
 use crate::grammar::{Grammar, Symbol};
 use std::cmp::Ordering;
@@ -97,6 +98,26 @@ impl LRItem {
             next == s
         } else {
             false
+        }
+    }
+
+    pub fn with_null(&self) -> LRItem {
+        LRItem {
+            dot: self.dot,
+            production: self.production,
+            lookahead: InputSymbol::Character(0 as char),
+        }
+    }
+}
+
+impl From<&Item> for LRItem {
+    /// Returns an LRItem generated from an Item with the lookahead set to
+    /// the null character
+    fn from(item: &Item) -> Self {
+        Self {
+            dot: item.dot,
+            production: item.production,
+            lookahead: InputSymbol::Character(0 as char),
         }
     }
 }
