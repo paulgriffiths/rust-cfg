@@ -31,6 +31,7 @@ pub fn output(g: &Grammar, verbose: bool) {
         w = width
     );
     println!("{:w$}: {}", "LL(1)", g.is_ll_one(), w = width);
+    println!("{:w$}: {}", "LR(0)", lr::new_lr0(g).is_ok(), w = width);
     println!("{:w$}: {}", "SLR(1)", lr::new_simple(g).is_ok(), w = width);
     println!(
         "{:w$}: {}",

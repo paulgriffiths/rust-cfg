@@ -2,6 +2,7 @@ pub mod clr;
 pub mod items;
 pub mod lalr;
 pub mod lritems;
+pub mod lrzero;
 pub mod slr;
 mod stack;
 use super::parsetree::{Child, Node, Tree};
@@ -11,6 +12,7 @@ use crate::errors::{Error, Result};
 use crate::grammar::{Grammar, Symbol};
 use clr::ParseTable as CanonicalLRParseTable;
 use lalr::ParseTable as LALRParseTable;
+use lrzero::ParseTable as LR0ParseTable;
 use slr::ParseTable as SimpleLRParseTable;
 use stack::{Stack, StackValue};
 use std::collections::VecDeque;
@@ -35,6 +37,13 @@ pub trait PTable {
     fn action(&self, state: usize, lookahead: usize) -> TableEntry;
     fn eof_index(&self) -> usize;
     fn grammar(&self) -> &Grammar;
+}
+
+/// Creates a new parser with an LR(0) parse table
+pub fn new_lr0(grammar: &Grammar) -> Result<Parser<LR0ParseTable>> {
+    Ok(Parser {
+        table: LR0ParseTable::new(grammar.augment())?,
+    })
 }
 
 /// Creates a new parser with a simple LR parse table
@@ -161,7 +170,22 @@ mod test {
     use crate::test::{assert_parse_error, test_file_path};
 
     #[test]
-    fn test_parse_simple() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    fn test_parse_lr0() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let g = Grammar::new_from_file(&test_file_path("grammars/lrzero/list.cfg"))?;
+        let parser = new_lr0(&g)?;
+
+        let tree = parser.parse("(x,(x))")?;
+        assert_eq!(tree.frontier(), "(x,(x))");
+        assert_eq!(
+            tree.visualize(&g),
+            "S→['(' L→[L→[S→['x']] ',' S→['(' L→[S→['x']] ')']] ')']",
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_parse_slr() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let g = Grammar::new_from_file(&test_file_path("grammars/lr_simple_expr.cfg"))?;
         let parser = new_simple(&g)?;
 
@@ -175,24 +199,7 @@ mod test {
                 "'*' F→[ID→[letter→['c'] ID'→[ϵ]]]]]"
             )
         );
-        Ok(())
-    }
 
-    #[test]
-    fn test_parse_canonical() -> std::result::Result<(), Box<dyn std::error::Error>> {
-        let g = Grammar::new_from_file(&test_file_path("grammars/lr_simple_expr.cfg"))?;
-        let parser = new_canonical(&g)?;
-
-        let tree = parser.parse("a+b*c")?;
-        assert_eq!(tree.frontier(), "a+b*c");
-        assert_eq!(
-            tree.visualize(&g),
-            concat!(
-                "E→[E→[T→[F→[ID→[letter→['a'] ID'→[ϵ]]]]] ",
-                "'+' T→[T→[F→[ID→[letter→['b'] ID'→[ϵ]]]] ",
-                "'*' F→[ID→[letter→['c'] ID'→[ϵ]]]]]"
-            )
-        );
         Ok(())
     }
 
@@ -211,6 +218,26 @@ mod test {
                 "'*' F→[ID→[letter→['c'] ID'→[ϵ]]]]]"
             )
         );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_parse_clr() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let g = Grammar::new_from_file(&test_file_path("grammars/lr_simple_expr.cfg"))?;
+        let parser = new_canonical(&g)?;
+
+        let tree = parser.parse("a+b*c")?;
+        assert_eq!(tree.frontier(), "a+b*c");
+        assert_eq!(
+            tree.visualize(&g),
+            concat!(
+                "E→[E→[T→[F→[ID→[letter→['a'] ID'→[ϵ]]]]] ",
+                "'+' T→[T→[F→[ID→[letter→['b'] ID'→[ϵ]]]] ",
+                "'*' F→[ID→[letter→['c'] ID'→[ϵ]]]]]"
+            )
+        );
+
         Ok(())
     }
 
