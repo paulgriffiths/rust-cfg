@@ -104,7 +104,7 @@ impl Item {
 }
 
 /// A hashable ItemSet, suitable for use in a HashSet of ItemSets
-pub struct ItemStateSet(pub ItemSet);
+struct ItemStateSet(ItemSet);
 
 impl PartialEq for ItemStateSet {
     fn eq(&self, other: &ItemStateSet) -> bool {
@@ -291,7 +291,7 @@ impl Builder<'_> {
 }
 
 /// Returns CLOSURE(items)
-pub fn closure(g: &Grammar, items: &ItemSet) -> ItemSet {
+fn closure(g: &Grammar, items: &ItemSet) -> ItemSet {
     // Algorithm adapted from Aho et al (2007) p.243
 
     let mut closure = ItemSet::new();
@@ -343,22 +343,6 @@ pub fn closure(g: &Grammar, items: &ItemSet) -> ItemSet {
     }
 
     closure
-}
-
-/// Returns GOTO(items, s)
-pub fn goto(g: &Grammar, items: &ItemSet, s: Symbol) -> ItemSet {
-    // Algorithm adapted from Aho et al (2007) p.246
-
-    // GOTO(items) is defined to be the closure of the set of all items
-    // A → 𝛼X·𝛽 such that A → 𝛼·X𝛽 is in items.
-    let mut goto = ItemSet::new();
-    for item in items {
-        if item.next_symbol_is(g, s) {
-            goto.insert(item.advance());
-        }
-    }
-
-    closure(g, &goto)
 }
 
 #[cfg(test)]

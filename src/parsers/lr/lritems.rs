@@ -123,7 +123,7 @@ impl From<&Item> for LRItem {
 }
 
 /// A hashable LRItemSet, suitable for use in a HashSet of LRItemSets
-pub struct LRItemStateSet(pub LRItemSet);
+struct LRItemStateSet(LRItemSet);
 
 impl PartialEq for LRItemStateSet {
     fn eq(&self, other: &LRItemStateSet) -> bool {
@@ -373,22 +373,6 @@ pub fn closure(g: &Grammar, items: &LRItemSet) -> LRItemSet {
     }
 
     closure
-}
-
-/// Returns GOTO(items, s)
-pub fn goto(g: &Grammar, items: &LRItemSet, s: Symbol) -> LRItemSet {
-    // Algorithm adapted from Aho et al (2007) p.261
-
-    // GOTO(items) is defined to be the closure of the set of all items
-    // [A → 𝛼X·𝛽, a] such that [A → 𝛼·X𝛽, a] is in items.
-    let mut goto = LRItemSet::new();
-    for item in items {
-        if !item.is_end(g) && g.production(item.production).body[item.dot] == s {
-            goto.insert(item.advance());
-        }
-    }
-
-    closure(g, &goto)
 }
 
 #[cfg(test)]

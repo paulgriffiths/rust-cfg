@@ -40,10 +40,10 @@ impl ParseTable {
 
         // Get the the LALR(1) collection of sets of items for the (augmented)
         // grammar
-        let sets: Vec<_> = lalr_collection(&grammar);
+        let collection = lalr_collection(&grammar);
 
-        let mut actions: Vec<Vec<TableEntry>> = Vec::with_capacity(sets.len());
-        for _ in 0..sets.len() {
+        let mut actions: Vec<Vec<TableEntry>> = Vec::with_capacity(collection.goto.len());
+        for _ in 0..collection.goto.len() {
             // Add a table row for each state, pre-populated with error actions
             actions.push(vec![TableEntry::Error; eof_index + 1]);
         }
@@ -54,112 +54,31 @@ impl ParseTable {
             eof_index,
         };
 
-        // Add SHIFT and REDUCE actions, and GOTOs
-        for (state, items) in sets.iter().enumerate() {
-            for item in items {
-                if let Some(symbol) = item.next_symbol(&table.grammar, false) {
-                    let goto = table.goto(&sets, state, symbol);
-                    match symbol {
-                        Symbol::Terminal(t) => {
-                            table.add_shift(state, goto, t)?;
-                        }
-                        Symbol::NonTerminal(t) => {
-                            table.add_goto(state, goto, t)?;
-                        }
+        // Add SHIFT actions and GOTOs
+        for from in 0..collection.goto.len() {
+            for symbol in 0..collection.goto[from].len() {
+                if let Some(to) = collection.goto[from][symbol] {
+                    table.actions[from][symbol] = match table.grammar.symbols()[symbol] {
+                        Symbol::Terminal(_) => TableEntry::Shift(to),
+                        Symbol::NonTerminal(_) => TableEntry::Goto(to),
                         Symbol::Empty => {
-                            panic!("symbol is ϵ");
+                            panic!("ϵ found in grammar symbols");
                         }
                     }
-                } else {
+                }
+            }
+        }
+
+        // Add REDUCE actions
+        for (state, items) in collection.sets.iter().enumerate() {
+            for item in items {
+                if item.is_end(&table.grammar) {
                     table.add_reductions(state, item)?;
                 }
             }
         }
 
         Ok(table)
-    }
-
-    /// Calculates GOTO(sets[from], symbol) for an LALR parse table
-    fn goto(&mut self, sets: &[LRItemSet], from: usize, symbol: Symbol) -> usize {
-        let got = &lritems::goto(&self.grammar, &sets[from], symbol);
-
-        // Since LALR states are unions of LR(1) states, we need to check if
-        // the items in sets[from] form a subset of the items in one
-        // of the collection of states.
-        for (i, state) in sets.iter().enumerate() {
-            if got.is_subset(state) {
-                return i;
-            }
-        }
-
-        // We should always find a GOTO if we've constructed the sets
-        // correctly
-        panic!("GOTO not found");
-    }
-
-    /// Adds a GOTO entry to the table for states from -> to on terminal t
-    fn add_goto(&mut self, from: usize, to: usize, t: usize) -> Result<()> {
-        match self.actions[from][t] {
-            TableEntry::Accept => {
-                return Err(Error::GrammarNotLALR1(format!(
-                    concat!(
-                        "conflict between GOTO({}) and ACCEPT ",
-                        "for state {} on non-terminal '{}'",
-                    ),
-                    to,
-                    from,
-                    self.grammar.non_terminal_name(t)
-                )));
-            }
-            TableEntry::Reduce(p) => {
-                return Err(Error::GrammarNotLALR1(format!(
-                    concat!(
-                        "conflict between GOTO({}) and REDUCE({}) ",
-                        "for state {} on input character '{}'"
-                    ),
-                    to,
-                    self.grammar.format_production(p),
-                    from,
-                    self.grammar.non_terminal_name(t)
-                )));
-            }
-            // Shouldn't happen either, since the method of constructing the
-            // state sets renders GOTO-GOTO conflicts impossible
-            TableEntry::Goto(existing) => {
-                if existing != to {
-                    return Err(Error::GrammarNotLALR1(format!(
-                        concat!(
-                            "conflict between GOTO({}) and GOTO({}) ",
-                            "for state {} on input character '{}'"
-                        ),
-                        to,
-                        existing,
-                        from,
-                        self.grammar.non_terminal_name(t)
-                    )));
-                }
-            }
-            // Shouldn't happen, since GOTO is for non-terminals, and
-            // reductions are for terminals/end-of-input
-            TableEntry::Shift(s) => {
-                return Err(Error::GrammarNotLALR1(format!(
-                    concat!(
-                        "conflict between GOTO({}) and SHIFT({}) ",
-                        "for state {} on input character '{}'"
-                    ),
-                    to,
-                    s,
-                    from,
-                    self.grammar.non_terminal_name(t)
-                )));
-            }
-            // Table entry was not previously set, so set it
-            TableEntry::Error => {
-                self.actions[from][t] = TableEntry::Goto(to);
-            }
-        }
-
-        Ok(())
     }
 
     /// Adds a REDUCE production item.production entry for the given state to
@@ -242,71 +161,6 @@ impl ParseTable {
 
         Ok(())
     }
-
-    /// Adds a SHIFT entry to the table for states from -> to on terminal t
-    fn add_shift(&mut self, from: usize, to: usize, t: usize) -> Result<()> {
-        match self.actions[from][t] {
-            TableEntry::Accept => {
-                return Err(Error::GrammarNotLALR1(format!(
-                    concat!(
-                        "conflict between SHIFT({}) and ACCEPT ",
-                        "for state {} on input character '{}'"
-                    ),
-                    to,
-                    from,
-                    self.grammar.terminal_value(t)
-                )));
-            }
-            TableEntry::Reduce(p) => {
-                return Err(Error::GrammarNotLALR1(format!(
-                    concat!(
-                        "conflict between SHIFT({}) and REDUCE({}) ",
-                        "for state {} on input character '{}'"
-                    ),
-                    to,
-                    self.grammar.format_production(p),
-                    from,
-                    self.grammar.terminal_value(t)
-                )));
-            }
-            // Shouldn't happen, since GOTO is for non-terminals, and
-            // reductions are for terminals/end-of-input
-            TableEntry::Goto(s) => {
-                return Err(Error::GrammarNotLALR1(format!(
-                    concat!(
-                        "conflict between SHIFT({}) and GOTO ({}) ",
-                        "from state {} on input character '{}'",
-                    ),
-                    to,
-                    s,
-                    from,
-                    self.grammar.terminal_value(t),
-                )));
-            }
-            // Shouldn't happen either, since the method of constructing the
-            // state sets renders SHIFT-SHIFT conflicts impossible
-            TableEntry::Shift(existing) => {
-                if existing != to {
-                    return Err(Error::GrammarNotLALR1(format!(
-                        concat!(
-                            "conflict between SHIFT({}) and SHIFT ({}) ",
-                            "from state {} on input character '{}'",
-                        ),
-                        to,
-                        existing,
-                        from,
-                        self.grammar.terminal_value(t)
-                    )));
-                }
-            }
-            // Table entry was not previously set, so set it
-            TableEntry::Error => {
-                self.actions[from][t] = TableEntry::Shift(to);
-            }
-        }
-
-        Ok(())
-    }
 }
 
 /// A table used for construction of the kernels of the LALR(1) collection of
@@ -318,6 +172,8 @@ struct LookaheadsTable {
     items: Vec<Vec<Item>>,
     /// The lookahead entries
     lookaheads: Vec<Vec<LookaheadsEntry>>,
+    /// GOTO transition table
+    goto: Vec<Vec<Option<usize>>>,
 }
 
 #[derive(Debug, Clone)]
@@ -405,21 +261,16 @@ impl LookaheadsTable {
             }
         }
 
-        LookaheadsTable { items, lookaheads }
+        LookaheadsTable {
+            items,
+            lookaheads,
+            goto: kernels.goto,
+        }
     }
 }
 
 /// Returns the LALR(1) collection of sets of items for (augmented) grammar g.
-pub fn lalr_collection(g: &Grammar) -> Vec<LRItemSet> {
-    lalr_collection_kernels(g)
-        .iter()
-        .map(|s| lritems::closure(g, s))
-        .collect()
-}
-
-/// Returns the kernels of the LALR(1) collection of sets of items for
-/// (augmented) grammar g.
-pub fn lalr_collection_kernels(g: &Grammar) -> Vec<LRItemSet> {
+pub fn lalr_collection(g: &Grammar) -> lritems::Collection {
     // Algorithm adapted from Aho et al (2007) p.273
 
     let mut table = LookaheadsTable::new(g);
@@ -467,7 +318,10 @@ pub fn lalr_collection_kernels(g: &Grammar) -> Vec<LRItemSet> {
         }
     }
 
-    sets
+    lritems::Collection {
+        sets: sets.iter().map(|s| lritems::closure(g, s)).collect(),
+        goto: table.goto,
+    }
 }
 
 #[cfg(test)]
@@ -554,12 +408,12 @@ mod test {
     }
 
     #[test]
-    fn test_lalr_collection() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    fn test_lalr_collection_sets() -> std::result::Result<(), Box<dyn std::error::Error>> {
         // Grammar and test cases taken from Aho et al (2007) p.262 and 269
 
         let g = Grammar::new_from_file(&test_file_path("grammars/lalr/grammar_aug.cfg"))?;
 
-        let s = lalr_collection(&g);
+        let s = lalr_collection(&g).sets;
         assert_eq!(s.len(), 7);
 
         // I0
@@ -674,135 +528,6 @@ mod test {
             },
         ]);
         assert_eq!(s[6], items);
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_lalr_collection_kernels() -> std::result::Result<(), Box<dyn std::error::Error>> {
-        // Grammar and test cases taken from Aho et al (2007) p.275
-
-        let g = Grammar::new_from_file(&test_file_path("grammars/lalr/l_r_values_aug.cfg"))?;
-
-        let s = lalr_collection_kernels(&g);
-        assert_eq!(s.len(), 10);
-
-        // I0
-        let items = LRItemSet::from([LRItem {
-            production: 0,
-            dot: 0,
-            lookahead: InputSymbol::EndOfInput,
-        }]);
-        assert_eq!(items, s[0]);
-
-        // I1
-        let items = LRItemSet::from([LRItem {
-            production: 0,
-            dot: 1,
-            lookahead: InputSymbol::EndOfInput,
-        }]);
-        assert_eq!(items, s[1]);
-
-        // I2
-        let items = LRItemSet::from([
-            LRItem {
-                production: 1,
-                dot: 1,
-                lookahead: InputSymbol::EndOfInput,
-            },
-            LRItem {
-                production: 5,
-                dot: 1,
-                lookahead: InputSymbol::EndOfInput,
-            },
-        ]);
-        assert_eq!(items, s[2]);
-
-        // I3
-        let items = LRItemSet::from([LRItem {
-            production: 2,
-            dot: 1,
-            lookahead: InputSymbol::EndOfInput,
-        }]);
-        assert_eq!(items, s[3]);
-
-        // I4
-        let items = LRItemSet::from([
-            LRItem {
-                production: 3,
-                dot: 1,
-                lookahead: InputSymbol::Character('='),
-            },
-            LRItem {
-                production: 3,
-                dot: 1,
-                lookahead: InputSymbol::EndOfInput,
-            },
-        ]);
-        assert_eq!(items, s[4]);
-
-        // I5
-        let items = LRItemSet::from([
-            LRItem {
-                production: 4,
-                dot: 1,
-                lookahead: InputSymbol::Character('='),
-            },
-            LRItem {
-                production: 4,
-                dot: 1,
-                lookahead: InputSymbol::EndOfInput,
-            },
-        ]);
-        assert_eq!(items, s[5]);
-
-        // I6
-        let items = LRItemSet::from([LRItem {
-            production: 1,
-            dot: 2,
-            lookahead: InputSymbol::EndOfInput,
-        }]);
-        assert_eq!(items, s[6]);
-
-        // I7
-        // I7 and I8 are flipped compared with Aho et al
-        let items = LRItemSet::from([
-            LRItem {
-                production: 5,
-                dot: 1,
-                lookahead: InputSymbol::Character('='),
-            },
-            LRItem {
-                production: 5,
-                dot: 1,
-                lookahead: InputSymbol::EndOfInput,
-            },
-        ]);
-        assert_eq!(items, s[7]);
-
-        // I8
-        // I7 and I8 are flipped compared with Aho et al
-        let items = LRItemSet::from([
-            LRItem {
-                production: 3,
-                dot: 2,
-                lookahead: InputSymbol::Character('='),
-            },
-            LRItem {
-                production: 3,
-                dot: 2,
-                lookahead: InputSymbol::EndOfInput,
-            },
-        ]);
-        assert_eq!(items, s[8]);
-
-        // I9
-        let items = LRItemSet::from([LRItem {
-            production: 1,
-            dot: 3,
-            lookahead: InputSymbol::EndOfInput,
-        }]);
-        assert_eq!(items, s[9]);
 
         Ok(())
     }
