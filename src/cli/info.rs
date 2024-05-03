@@ -1,12 +1,41 @@
 use super::common;
-use crate::grammar::Grammar;
+use crate::grammar::{Grammar, Symbol};
 use crate::parsers::lr;
 
 /// Outputs information about a grammar
 pub fn output(g: &Grammar, verbose: bool) {
-    let width = 27;
+    let width = 33;
     let unreachable = g.unreachable();
     let unrealizable = g.unrealizable();
+    let eproductions = {
+        let mut eproductions: Vec<Symbol> = Vec::new();
+
+        for nt in g.non_terminal_ids() {
+            for p in g.productions_for_non_terminal(*nt) {
+                let prod = g.production(*p);
+                if prod.is_e() {
+                    eproductions.push(Symbol::NonTerminal(prod.head));
+                }
+            }
+        }
+
+        eproductions
+    };
+    let nullable = {
+        let mut nullable: Vec<Symbol> = Vec::new();
+
+        for nt in g.non_terminal_ids() {
+            for p in g.productions_for_non_terminal(*nt) {
+                let (_, contains_e) = g.first_production(*p, false);
+                if contains_e {
+                    nullable.push(Symbol::NonTerminal(g.production(*p).head));
+                    break;
+                }
+            }
+        }
+
+        nullable
+    };
 
     println!(
         "{:w$}: {}",
@@ -24,6 +53,26 @@ pub fn output(g: &Grammar, verbose: bool) {
         "{:w$}: {}",
         "Number of terminals",
         g.terminal_ids().len(),
+        w = width
+    );
+    println!(
+        "{:w$}: {}",
+        "Non-terminals with ϵ-productions",
+        if eproductions.is_empty() {
+            "<none>".to_string()
+        } else {
+            g.format_symbols(&eproductions)
+        },
+        w = width
+    );
+    println!(
+        "{:w$}: {}",
+        "Nullable non-terminals",
+        if nullable.is_empty() {
+            "<none>".to_string()
+        } else {
+            g.format_symbols(&nullable)
+        },
         w = width
     );
     println!(

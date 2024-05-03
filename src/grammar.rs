@@ -973,7 +973,10 @@ mod test {
 
         assert_eq!(
             g.unrealizable(),
-            vec![Symbol::NonTerminal(g.non_terminal_index("B")),]
+            vec![
+                Symbol::NonTerminal(g.non_terminal_index("B")),
+                Symbol::NonTerminal(g.non_terminal_index("C")),
+            ]
         );
 
         let g = Grammar::new_from_file(&test_file_path("grammars/nlr_simple_expr.cfg"))?;
