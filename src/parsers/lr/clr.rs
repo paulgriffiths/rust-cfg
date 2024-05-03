@@ -2,7 +2,7 @@ use super::lritems::{Collection, LRItem};
 use super::InputSymbol;
 use super::{PTable, TableEntry};
 use crate::errors::{Error, Result};
-use crate::grammar::{Grammar, Symbol};
+use crate::grammar::Grammar;
 
 /// A parse table for a canonical LR parser
 pub struct ParseTable {
@@ -30,40 +30,14 @@ impl ParseTable {
     pub fn new(grammar: Grammar) -> Result<ParseTable> {
         // Algorithm adapted from Aho et al (2007) pp.265
 
-        // We use an index one past that of the last grammar symbol to
-        // represent end-of-input
-        let eof_index = grammar.symbols().len();
-
-        // "actions" on terminals and GOTOs for non-terminals are included in
-        // the same table for efficiency, since the sets of terminal IDs and
-        // non-terminal IDs are distinct
         let collection = Collection::new(&grammar);
-        let mut actions: Vec<Vec<TableEntry>> = Vec::with_capacity(collection.sets.len());
-        for _ in 0..collection.sets.len() {
-            // Add a table row for each state, pre-populated with error actions
-            actions.push(vec![TableEntry::Error; eof_index + 1]);
-        }
+        let (actions, eof_index) = collection.initial_actions(&grammar);
 
         let mut table = ParseTable {
             grammar,
             actions,
             eof_index,
         };
-
-        // Add SHIFT actions and GOTOs
-        for from in 0..collection.goto.len() {
-            for symbol in 0..collection.goto[from].len() {
-                if let Some(to) = collection.goto[from][symbol] {
-                    table.actions[from][symbol] = match table.grammar.symbols()[symbol] {
-                        Symbol::Terminal(_) => TableEntry::Shift(to),
-                        Symbol::NonTerminal(_) => TableEntry::Goto(to),
-                        Symbol::Empty => {
-                            panic!("ϵ found in grammar symbols");
-                        }
-                    }
-                }
-            }
-        }
 
         // Add REDUCE actions
         for (state, items) in collection.sets.iter().enumerate() {

@@ -1,4 +1,5 @@
 use super::lritems::LRItem;
+use super::TableEntry;
 use crate::grammar::{Grammar, Symbol};
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
@@ -160,6 +161,37 @@ impl Collection {
             sets: builder.sets,
             goto: builder.goto,
         }
+    }
+
+    /// Returns a partially-completed parsing table, prepopulated with ERROR
+    /// entries, and then populated with SHIFT and GOTO actions. The index of
+    /// the end-of-input marker, which is not a symbol in the grammar but which
+    /// does have a column in the parsing table, is also returned.
+    pub fn initial_actions(&self, g: &Grammar) -> (Vec<Vec<TableEntry>>, usize) {
+        let eof_index = g.symbols().len();
+
+        let mut actions: Vec<Vec<TableEntry>> = Vec::with_capacity(self.goto.len());
+        for _ in 0..self.goto.len() {
+            // Add a table row for each state, pre-populated with ERROR actions
+            actions.push(vec![TableEntry::Error; eof_index + 1]);
+        }
+
+        // Add SHIFT actions for terminals, and GOTO actions for non-terminals
+        for (i, state) in self.goto.iter().enumerate() {
+            for (j, symbol) in state.iter().enumerate() {
+                if let Some(to) = *symbol {
+                    actions[i][j] = match g.symbols()[j] {
+                        Symbol::Terminal(_) => TableEntry::Shift(to),
+                        Symbol::NonTerminal(_) => TableEntry::Goto(to),
+                        Symbol::Empty => {
+                            panic!("ϵ found in grammar symbols");
+                        }
+                    }
+                }
+            }
+        }
+
+        (actions, eof_index)
     }
 
     /// Returns a copy of the collection with non-kernel items removed.

@@ -5,7 +5,7 @@ use super::lritems::{LRItem, LRItemSet};
 use super::InputSymbol;
 use super::{PTable, TableEntry};
 use crate::errors::{Error, Result};
-use crate::grammar::{Grammar, Symbol};
+use crate::grammar::Grammar;
 use std::collections::HashSet;
 
 /// A parse table for an LALR parser
@@ -34,40 +34,14 @@ impl ParseTable {
     pub fn new(grammar: Grammar) -> Result<ParseTable> {
         // Algorithm adapted from Aho et al (2007) pp.265
 
-        // We use an index one past that of the last grammar symbol to
-        // represent end-of-input
-        let eof_index = grammar.symbols().len();
-
-        // Get the the LALR(1) collection of sets of items for the (augmented)
-        // grammar
         let collection = lalr_collection(&grammar);
-
-        let mut actions: Vec<Vec<TableEntry>> = Vec::with_capacity(collection.goto.len());
-        for _ in 0..collection.goto.len() {
-            // Add a table row for each state, pre-populated with error actions
-            actions.push(vec![TableEntry::Error; eof_index + 1]);
-        }
+        let (actions, eof_index) = collection.initial_actions(&grammar);
 
         let mut table = ParseTable {
             grammar,
             actions,
             eof_index,
         };
-
-        // Add SHIFT actions and GOTOs
-        for from in 0..collection.goto.len() {
-            for symbol in 0..collection.goto[from].len() {
-                if let Some(to) = collection.goto[from][symbol] {
-                    table.actions[from][symbol] = match table.grammar.symbols()[symbol] {
-                        Symbol::Terminal(_) => TableEntry::Shift(to),
-                        Symbol::NonTerminal(_) => TableEntry::Goto(to),
-                        Symbol::Empty => {
-                            panic!("ϵ found in grammar symbols");
-                        }
-                    }
-                }
-            }
-        }
 
         // Add REDUCE actions
         for (state, items) in collection.sets.iter().enumerate() {
