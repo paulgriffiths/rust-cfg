@@ -453,7 +453,7 @@ impl Grammar {
     /// recognized
     pub fn maybe_non_terminal_index(&self, s: &str) -> Option<usize> {
         if self.symbol_table.contains_non_terminal(s) {
-            Some(self.symbol_table.non_terminal_index(s))
+            Some(self.non_terminal_index(s))
         } else {
             None
         }
@@ -472,6 +472,12 @@ impl Grammar {
     /// Returns a sorted slice of the IDs of all non-terminals
     pub fn non_terminal_ids(&self) -> &[usize] {
         self.symbol_table.non_terminal_ids()
+    }
+
+    /// Returns the index of a non-terminal, and panics if the non-terminal is
+    /// not recognized
+    pub fn non_terminal_index(&self, s: &str) -> usize {
+        self.symbol_table.non_terminal_index(s)
     }
 
     /// Returns the name of a non-terminal
@@ -525,6 +531,35 @@ impl Grammar {
     /// Returns the character value of a terminal
     pub fn terminal_value(&self, id: usize) -> char {
         self.symbol_table.terminal_value(id)
+    }
+
+    /// Returns a vector of unreachable non-terminals
+    pub fn unreachable(&self) -> Vec<Symbol> {
+        fn reach(g: &Grammar, seen: &mut HashSet<usize>, nt: usize) {
+            seen.insert(nt);
+
+            // Iterate through each production for this non-terminal, and
+            // recursively call this function for any non-terminals in the
+            // production body which we haven't yet seen
+            for p in g.productions_for_non_terminal(nt) {
+                for s in &g.production(*p).body {
+                    if let Symbol::NonTerminal(n) = s {
+                        if !seen.contains(n) {
+                            reach(g, seen, *n);
+                        }
+                    }
+                }
+            }
+        }
+
+        let mut seen: HashSet<usize> = HashSet::new();
+        reach(self, &mut seen, self.start());
+
+        self.non_terminal_ids()
+            .iter()
+            .filter(|i| !seen.contains(i))
+            .map(|i| Symbol::NonTerminal(*i))
+            .collect()
     }
 }
 
@@ -860,6 +895,24 @@ mod test {
             g.terminal_ids(),
             [vec![3usize, 6, 7, 8], (12..38).collect::<Vec<usize>>()].concat()
         );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_unreachable() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let g = Grammar::new_from_file(&test_file_path("grammars/unreachable/unreachable.cfg"))?;
+
+        assert_eq!(
+            g.unreachable(),
+            vec![
+                Symbol::NonTerminal(g.non_terminal_index("D")),
+                Symbol::NonTerminal(g.non_terminal_index("E"))
+            ]
+        );
+
+        let g = Grammar::new_from_file(&test_file_path("grammars/nlr_simple_expr.cfg"))?;
+        assert!(g.unreachable().is_empty());
 
         Ok(())
     }

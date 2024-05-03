@@ -4,7 +4,8 @@ use crate::parsers::lr;
 
 /// Outputs information about a grammar
 pub fn output(g: &Grammar, verbose: bool) {
-    let width = 24;
+    let width = 26;
+    let unreachable = g.unreachable();
 
     println!(
         "{:w$}: {}",
@@ -22,6 +23,16 @@ pub fn output(g: &Grammar, verbose: bool) {
         "{:w$}: {}",
         "Number of terminals",
         g.terminal_ids().len(),
+        w = width
+    );
+    println!(
+        "{:w$}: {}",
+        "Unreachable non-terminals",
+        if unreachable.is_empty() {
+            "<none>".to_string()
+        } else {
+            g.format_symbols(&unreachable)
+        },
         w = width
     );
     println!(
