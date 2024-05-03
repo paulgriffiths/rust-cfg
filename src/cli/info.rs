@@ -4,8 +4,9 @@ use crate::parsers::lr;
 
 /// Outputs information about a grammar
 pub fn output(g: &Grammar, verbose: bool) {
-    let width = 26;
+    let width = 27;
     let unreachable = g.unreachable();
+    let unrealizable = g.unrealizable();
 
     println!(
         "{:w$}: {}",
@@ -32,6 +33,16 @@ pub fn output(g: &Grammar, verbose: bool) {
             "<none>".to_string()
         } else {
             g.format_symbols(&unreachable)
+        },
+        w = width
+    );
+    println!(
+        "{:w$}: {}",
+        "Unrealizable non-terminals",
+        if unrealizable.is_empty() {
+            "<none>".to_string()
+        } else {
+            g.format_symbols(&unrealizable)
         },
         w = width
     );

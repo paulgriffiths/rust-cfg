@@ -561,6 +561,56 @@ impl Grammar {
             .map(|i| Symbol::NonTerminal(*i))
             .collect()
     }
+
+    /// Returns a vector of unrealizable non-terminals
+    pub fn unrealizable(&self) -> Vec<Symbol> {
+        let mut marked: HashSet<usize> = HashSet::new();
+
+        let mut count = 0;
+        loop {
+            // Loop through all non-terminals
+            for nt in self.non_terminal_ids() {
+                // Marked non-terminals are realizable, so no need to
+                // process them again
+                if marked.contains(nt) {
+                    continue;
+                }
+
+                // Loop through all productions for this (unmarked) non-terminal
+                'production: for p in self.productions_for_non_terminal(*nt) {
+                    for s in &self.production(*p).body {
+                        // A production which contains an unmarked non-terminal
+                        // may not be realizable, so move on to the next
+                        // production
+                        if let Symbol::NonTerminal(n) = s {
+                            if !marked.contains(n) {
+                                continue 'production;
+                            }
+                        }
+                    }
+
+                    // Otherwise mark the non-terminal and continue to the
+                    // next non-terminal, since we only need one realizable
+                    // production
+                    marked.insert(*nt);
+                    break;
+                }
+            }
+
+            // Loop until no new non-terminals are marked on a round
+            let new_count = marked.len();
+            if new_count == count {
+                break;
+            }
+            count = new_count;
+        }
+
+        self.non_terminal_ids()
+            .iter()
+            .filter(|i| !marked.contains(i))
+            .map(|i| Symbol::NonTerminal(*i))
+            .collect()
+    }
 }
 
 #[cfg(test)]
@@ -913,6 +963,21 @@ mod test {
 
         let g = Grammar::new_from_file(&test_file_path("grammars/nlr_simple_expr.cfg"))?;
         assert!(g.unreachable().is_empty());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_unrealizable() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let g = Grammar::new_from_file(&test_file_path("grammars/unrealizable/unrealizable.cfg"))?;
+
+        assert_eq!(
+            g.unrealizable(),
+            vec![Symbol::NonTerminal(g.non_terminal_index("B")),]
+        );
+
+        let g = Grammar::new_from_file(&test_file_path("grammars/nlr_simple_expr.cfg"))?;
+        assert!(g.unrealizable().is_empty());
 
         Ok(())
     }
