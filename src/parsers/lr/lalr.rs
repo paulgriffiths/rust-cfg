@@ -107,20 +107,6 @@ impl ParseTable {
                     item.lookahead,
                 )));
             }
-            TableEntry::Reduce(r) => {
-                if r != item.production {
-                    return Err(Error::GrammarNotLALR1(format!(
-                        concat!(
-                            "conflict between REDUCE({}) and REDUCE({}) ",
-                            "for state {} on input character '{}'"
-                        ),
-                        self.grammar.format_production(item.production),
-                        self.grammar.format_production(r),
-                        from,
-                        item.lookahead,
-                    )));
-                }
-            }
             // Shouldn't happen, since GOTO is for non-terminals, and
             // reductions are for terminals/end-of-input
             TableEntry::Goto(s) => {
@@ -147,6 +133,20 @@ impl ParseTable {
                     item.lookahead,
                 )));
             }
+            TableEntry::Reduce(r) => {
+                if r != item.production {
+                    return Err(Error::GrammarNotLALR1(format!(
+                        concat!(
+                            "conflict between REDUCE({}) and REDUCE({}) ",
+                            "for state {} on input character '{}'"
+                        ),
+                        self.grammar.format_production(item.production),
+                        self.grammar.format_production(r),
+                        from,
+                        item.lookahead,
+                    )));
+                }
+            }
             // Table entry was not previously set, so set it
             TableEntry::Error => {
                 // Add ACCEPT to the table if the production head is the
@@ -163,41 +163,39 @@ impl ParseTable {
     }
 }
 
-/// A table used for construction of the kernels of the LALR(1) collection of
-/// sets for an augmented grammar, which records which lookaheads are currently
-/// associated with an LR(0) kernel item, and which other LR(0) kernel items
-/// propagate values to that kernel item
-struct LookaheadsTable {
-    /// LR(0) items to which the lookaheads relate
+/// A builder for the kernels of the LALR(1) collection of sets for an
+/// augmented grammar, along with a GOTO transition table.
+struct Builder {
+    /// LR(0) kernel items
     items: Vec<Vec<Item>>,
-    /// The lookahead entries
-    lookaheads: Vec<Vec<LookaheadsEntry>>,
+    /// Lookahead entries
+    lookaheads: Vec<Vec<Lookaheads>>,
     /// GOTO transition table
     goto: Vec<Vec<Option<usize>>>,
 }
 
 #[derive(Debug, Clone)]
-struct LookaheadsEntry {
-    /// Lookaheads for this item
+struct Lookaheads {
+    /// Lookaheads for this item, including those spontaneously generated
     lookaheads: HashSet<InputSymbol>,
-    /// Items from which lookaheads propagate to this item
+    /// Other items from which lookaheads propagate to this item
     propagates: HashSet<(usize, usize)>,
 }
 
-impl LookaheadsEntry {
+impl Lookaheads {
     /// Returns a new, empty lookaheads entry
-    fn new() -> LookaheadsEntry {
-        LookaheadsEntry {
+    fn new() -> Lookaheads {
+        Lookaheads {
             lookaheads: HashSet::new(),
             propagates: HashSet::new(),
         }
     }
 }
 
-impl LookaheadsTable {
-    /// Creates a new lookaheads table and populates it with initial
-    /// spontaneously generated lookaheads
-    fn new(g: &Grammar) -> LookaheadsTable {
+impl Builder {
+    /// Creates a new builder and populates it with initial spontaneously
+    /// generated lookaheads
+    fn new(g: &Grammar) -> Builder {
         // Algorithm adapted from Aho et al (2007) p.273
 
         // First, get the set of LR(0) items for the (augmented) grammar, and
@@ -216,9 +214,9 @@ impl LookaheadsTable {
         // about from which items in I lookaheads are propagated to kernel items
         // in GOTO(I, X). Manually insert the end-of-input lookahead for the
         // (augmented) start production before we begin, since we always know that.
-        let mut lookaheads: Vec<Vec<LookaheadsEntry>> = Vec::with_capacity(items.len());
+        let mut lookaheads: Vec<Vec<Lookaheads>> = Vec::with_capacity(items.len());
         for item in &items {
-            lookaheads.push(vec![LookaheadsEntry::new(); item.len()]);
+            lookaheads.push(vec![Lookaheads::new(); item.len()]);
         }
         lookaheads[0][0].lookaheads.insert(InputSymbol::EndOfInput);
 
@@ -261,7 +259,7 @@ impl LookaheadsTable {
             }
         }
 
-        LookaheadsTable {
+        Builder {
             items,
             lookaheads,
             goto: kernels.goto,
@@ -273,26 +271,26 @@ impl LookaheadsTable {
 pub fn lalr_collection(g: &Grammar) -> lritems::Collection {
     // Algorithm adapted from Aho et al (2007) p.273
 
-    let mut table = LookaheadsTable::new(g);
-    let mut sets: Vec<LRItemSet> = vec![LRItemSet::new(); table.lookaheads.len()];
+    let mut builder = Builder::new(g);
+    let mut sets: Vec<LRItemSet> = vec![LRItemSet::new(); builder.lookaheads.len()];
 
     let mut count = 0;
     loop {
-        // Iterate through all the entries in the table lookaheads and
+        // Iterate through all the entries in the builder lookaheads and
         // propagate them
-        for i in 0..table.lookaheads.len() {
-            for j in 0..table.lookaheads[i].len() {
+        for i in 0..builder.lookaheads.len() {
+            for j in 0..builder.lookaheads[i].len() {
                 // Propagate the lookaheads
-                for (k, l) in table.lookaheads[i][j].clone().propagates.into_iter() {
-                    for c in table.lookaheads[k][l].lookaheads.clone().into_iter() {
-                        table.lookaheads[i][j].lookaheads.insert(c);
+                for (k, l) in builder.lookaheads[i][j].clone().propagates.into_iter() {
+                    for c in builder.lookaheads[k][l].lookaheads.clone().into_iter() {
+                        builder.lookaheads[i][j].lookaheads.insert(c);
                     }
                 }
             }
         }
 
         // Continue until no more new lookaheads are propagated
-        let new_count: usize = table
+        let new_count: usize = builder
             .lookaheads
             .iter()
             .flat_map(|s: &Vec<_>| s.iter())
@@ -305,9 +303,9 @@ pub fn lalr_collection(g: &Grammar) -> lritems::Collection {
     }
 
     // Add the LALR(1) kernel items
-    for (i, items) in table.lookaheads.iter().enumerate() {
+    for (i, items) in builder.lookaheads.iter().enumerate() {
         for (j, entry) in items.iter().enumerate() {
-            let item = &table.items[i][j];
+            let item = &builder.items[i][j];
             for c in entry.lookaheads.iter() {
                 sets[i].insert(LRItem {
                     production: item.production,
@@ -320,7 +318,7 @@ pub fn lalr_collection(g: &Grammar) -> lritems::Collection {
 
     lritems::Collection {
         sets: sets.iter().map(|s| lritems::closure(g, s)).collect(),
-        goto: table.goto,
+        goto: builder.goto,
     }
 }
 

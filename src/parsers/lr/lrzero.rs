@@ -107,19 +107,19 @@ impl ParseTable {
                         input_character,
                     )));
                 }
-                TableEntry::Reduce(r) => {
-                    if r != item.production {
-                        return Err(Error::GrammarNotLR0(format!(
-                            concat!(
-                                "conflict between REDUCE({}) and REDUCE({}) ",
-                                "for state {} on input character '{}'"
-                            ),
-                            self.grammar.format_production(item.production),
-                            self.grammar.format_production(r),
-                            from,
-                            input_character,
-                        )));
-                    }
+                // Shouldn't happen, since GOTO is for non-terminals, and
+                // reductions are for terminals/end-of-input
+                TableEntry::Goto(s) => {
+                    return Err(Error::GrammarNotLR0(format!(
+                        concat!(
+                            "conflict between REDUCE({}) and GOTO ({}) ",
+                            "for state {} on input character '{}'",
+                        ),
+                        self.grammar.format_production(item.production),
+                        s,
+                        from,
+                        input_character,
+                    )));
                 }
                 // Note: many LR(0) parsers will accept a SHIFT-REDUCE conflict
                 // on a single REDUCE and default to shift, to accept some
@@ -138,19 +138,19 @@ impl ParseTable {
                         input_character,
                     )));
                 }
-                // Shouldn't happen, since GOTO is for non-terminals, and
-                // reductions are for terminals/end-of-input
-                TableEntry::Goto(s) => {
-                    return Err(Error::GrammarNotLR0(format!(
-                        concat!(
-                            "conflict between REDUCE({}) and GOTO ({}) ",
-                            "for state {} on input character '{}'",
-                        ),
-                        self.grammar.format_production(item.production),
-                        s,
-                        from,
-                        input_character,
-                    )));
+                TableEntry::Reduce(r) => {
+                    if r != item.production {
+                        return Err(Error::GrammarNotLR0(format!(
+                            concat!(
+                                "conflict between REDUCE({}) and REDUCE({}) ",
+                                "for state {} on input character '{}'"
+                            ),
+                            self.grammar.format_production(item.production),
+                            self.grammar.format_production(r),
+                            from,
+                            input_character,
+                        )));
+                    }
                 }
                 // Table entry was not previously set, so set it
                 TableEntry::Error => {
