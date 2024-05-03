@@ -122,6 +122,72 @@ impl Grammar {
         }
     }
 
+    /// Returns a vector of non-terminals with cycles
+    pub fn cycles(&self) -> Vec<Symbol> {
+        fn is_cyclic(g: &Grammar, seen: &mut HashSet<usize>, needle: usize, p: usize) -> bool {
+            let prod = g.production(p);
+
+            // A cycle occurs when A derives A in one or more steps. Evidently,
+            // only productions consisting of a single non-terminal can appear
+            // in steps of that derviation, so return false if that's not what
+            // we have.
+            if prod.body.len() != 1 {
+                return false;
+            }
+
+            let Symbol::NonTerminal(nt) = prod.body[0] else {
+                return false;
+            };
+
+            // If this non-terminal is the needle, we have a cycle
+            if nt == needle {
+                return true;
+            }
+
+            // Return false if we've seen this non-terminal before for the
+            // current needle, otherwise mark that we've seen it
+            if seen.contains(&nt) {
+                return false;
+            }
+
+            seen.insert(nt);
+
+            // Call this function recursively for all productions of the
+            // non-terminal
+            for p in g.productions_for_non_terminal(nt) {
+                if is_cyclic(g, seen, needle, *p) {
+                    return true;
+                }
+            }
+
+            false
+        }
+
+        // Loop through all the productions
+        let mut cyclic: HashSet<usize> = HashSet::new();
+        for p in 0..self.productions.len() {
+            let prod = self.production(p);
+
+            // Skip if we've already determined that the non-terminal at the
+            // head of this production is cyclic
+            if cyclic.contains(&prod.head) {
+                continue;
+            }
+
+            // Otherwise, check if it's cyclic
+            let mut seen: HashSet<usize> = HashSet::new();
+            if is_cyclic(self, &mut seen, prod.head, p) {
+                cyclic.insert(prod.head);
+            }
+        }
+
+        self.non_terminal_ids()
+            .iter()
+            .filter(|i| cyclic.contains(i))
+            .map(|i| Symbol::NonTerminal(*i))
+            .collect()
+    }
+
     /// Returns FIRST(symbols) where symbols is a string of grammar symbols.
     /// Panics if any of the symbols are ϵ.
     pub fn first(&self, symbols: &[Symbol], include_e: bool) -> (FirstSet, bool) {
@@ -680,6 +746,26 @@ mod test {
             ])
         );
         assert_eq!(g.follow(3), FollowSet::from([FollowItem::EndOfInput]));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_cycles() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let g = Grammar::new_from_file(&test_file_path("grammars/cyclic/cyclic.cfg"))?;
+
+        assert_eq!(
+            g.cycles(),
+            vec![
+                Symbol::NonTerminal(g.non_terminal_index("A")),
+                Symbol::NonTerminal(g.non_terminal_index("B")),
+                Symbol::NonTerminal(g.non_terminal_index("E")),
+                Symbol::NonTerminal(g.non_terminal_index("F")),
+            ]
+        );
+
+        let g = Grammar::new_from_file(&test_file_path("grammars/nlr_simple_expr.cfg"))?;
+        assert!(g.cycles().is_empty());
 
         Ok(())
     }

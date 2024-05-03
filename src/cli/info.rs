@@ -5,6 +5,7 @@ use crate::parsers::lr;
 /// Outputs information about a grammar
 pub fn output(g: &Grammar, verbose: bool) {
     let width = 33;
+    let cycles = g.cycles();
     let unreachable = g.unreachable();
     let unrealizable = g.unrealizable();
     let eproductions = {
@@ -53,6 +54,16 @@ pub fn output(g: &Grammar, verbose: bool) {
         "{:w$}: {}",
         "Number of terminals",
         g.terminal_ids().len(),
+        w = width
+    );
+    println!(
+        "{:w$}: {}",
+        "Non-terminals with cycles",
+        if cycles.is_empty() {
+            "<none>".to_string()
+        } else {
+            g.format_symbols(&cycles)
+        },
         w = width
     );
     println!(
