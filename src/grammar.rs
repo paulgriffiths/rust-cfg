@@ -128,35 +128,33 @@ impl Grammar {
             let prod = g.production(p);
 
             // A cycle occurs when A derives A in one or more steps. Evidently,
-            // only productions consisting of a single non-terminal can appear
-            // in steps of that derviation, so return false if that's not what
-            // we have.
-            if prod.body.len() != 1 {
-                return false;
-            }
-
+            // only productions consisting of a single non-terminal, or of a
+            // form A → A𝛽 where 𝛽 derives ϵ, can appear in steps of that
+            // derivation.
             let Symbol::NonTerminal(nt) = prod.body[0] else {
                 return false;
             };
+
+            if prod.body.len() > 1 {
+                let (_, contains_e) = g.first(&prod.body[1..], false);
+                if !contains_e {
+                    return false;
+                }
+            }
 
             // If this non-terminal is the needle, we have a cycle
             if nt == needle {
                 return true;
             }
 
-            // Return false if we've seen this non-terminal before for the
-            // current needle, otherwise mark that we've seen it
-            if seen.contains(&nt) {
-                return false;
-            }
-
-            seen.insert(nt);
-
-            // Call this function recursively for all productions of the
-            // non-terminal
-            for p in g.productions_for_non_terminal(nt) {
-                if is_cyclic(g, seen, needle, *p) {
-                    return true;
+            // Recursively check all the productions if we haven't seen this
+            // non-terminal before for the current needle
+            if !seen.contains(&nt) {
+                seen.insert(nt);
+                for p in g.productions_for_non_terminal(nt) {
+                    if is_cyclic(g, seen, needle, *p) {
+                        return true;
+                    }
                 }
             }
 
@@ -168,16 +166,11 @@ impl Grammar {
         for p in 0..self.productions.len() {
             let prod = self.production(p);
 
-            // Skip if we've already determined that the non-terminal at the
-            // head of this production is cyclic
-            if cyclic.contains(&prod.head) {
-                continue;
-            }
-
-            // Otherwise, check if it's cyclic
-            let mut seen: HashSet<usize> = HashSet::new();
-            if is_cyclic(self, &mut seen, prod.head, p) {
-                cyclic.insert(prod.head);
+            if !cyclic.contains(&prod.head) {
+                let mut seen: HashSet<usize> = HashSet::new();
+                if is_cyclic(self, &mut seen, prod.head, p) {
+                    cyclic.insert(prod.head);
+                }
             }
         }
 
@@ -759,6 +752,7 @@ mod test {
             vec![
                 Symbol::NonTerminal(g.non_terminal_index("A")),
                 Symbol::NonTerminal(g.non_terminal_index("B")),
+                Symbol::NonTerminal(g.non_terminal_index("G")),
                 Symbol::NonTerminal(g.non_terminal_index("E")),
                 Symbol::NonTerminal(g.non_terminal_index("F")),
             ]
