@@ -2,6 +2,7 @@ mod firstfollow;
 mod input_info;
 mod lexer;
 mod parser;
+mod production;
 mod symbol;
 mod symboltable;
 mod token;
@@ -12,23 +13,10 @@ use crate::parsers::lr::lritems::LRItem;
 use crate::parsers::InputSymbol;
 pub use firstfollow::{FirstItem, FirstSet, FirstVector, FollowItem, FollowMap, FollowSet};
 use parser::NTProductionsMap;
-use std::collections::HashSet;
+pub use production::Production;
+use std::collections::{hash_map, HashSet};
 pub use symbol::Symbol;
 use symboltable::SymbolTable;
-
-/// A context-free grammar production
-#[derive(Debug, Clone)]
-pub struct Production {
-    pub head: usize,
-    pub body: Vec<Symbol>,
-}
-
-impl Production {
-    /// Returns true if a production is an ϵ-production
-    pub fn is_e(&self) -> bool {
-        self.body.len() == 1 && matches!(self.body[0], Symbol::Empty)
-    }
-}
 
 /// A context-free grammar
 pub struct Grammar {
@@ -45,28 +33,18 @@ impl Grammar {
     /// Creates a context-free grammar from a string representation
     pub fn new(input: &str) -> Result<Grammar> {
         let output = parser::parse(input)?;
-        let builder =
-            firstfollow::Builder::new(&output.symbol_table, &output.productions, output.start);
-        let firsts = builder.firsts;
-        let follows = builder.follows;
-
-        let mut symbols: Vec<Symbol> = Vec::with_capacity(output.symbol_table.len());
-        for (i, s) in output.symbol_table.symbols().iter().enumerate() {
-            symbols.push(match s {
-                symboltable::Symbol::Terminal(_) => Symbol::Terminal(i),
-                symboltable::Symbol::NonTerminal(_) => Symbol::NonTerminal(i),
-            })
-        }
-
-        Ok(Grammar {
+        let mut g = Grammar {
             symbol_table: output.symbol_table,
             productions: output.productions,
             nt_productions: output.nt_productions,
             start: output.start,
-            firsts,
-            follows,
-            symbols,
-        })
+            firsts: FirstVector::new(),
+            follows: FollowMap::new(),
+            symbols: Vec::new(),
+        };
+        g.complete();
+
+        Ok(g)
     }
 
     /// Creates a context-free grammar from a string representation in a file
@@ -97,20 +75,34 @@ impl Grammar {
     /// in the grammar are not updated.
     fn add_production(&mut self, p: Production) {
         let head = p.head;
+
+        if let hash_map::Entry::Vacant(e) = self.nt_productions.entry(head) {
+            e.insert(vec![self.productions.len()]);
+        } else {
+            for i in self.nt_productions.get(&head).unwrap().iter() {
+                if self.production(*i) == &p {
+                    return;
+                }
+            }
+
+            self.nt_productions
+                .get_mut(&head)
+                .unwrap()
+                .push(self.productions.len());
+        }
+
         self.productions.push(p);
-        self.nt_productions
-            .insert(head, vec![self.productions.len() - 1]);
     }
 
     /// Returns an augmented grammar, with a new start symbol S' and a new
     /// production S' → S, where S is the previous start symbol
     pub fn augment(&self) -> Grammar {
-        let mut augmented = self.copy_core();
+        let mut g = self.copy_core();
 
-        augmented.add_augmented_start();
-        augmented.complete();
+        g.add_augmented_start();
+        g.complete();
 
-        augmented
+        g
     }
 
     /// Completes the calculated members of a new grammar
@@ -420,6 +412,48 @@ impl Grammar {
         out
     }
 
+    /// Private method to remove ϵ-productions for an augmented grammar
+    /// (except the ϵ-productio for the augmented start symbol, if one exists)
+    fn int_remove_e_productions(&mut self) {
+        // Algorithm adapted from Sipser (2013) p.109
+
+        let mut e_nts: HashSet<usize> = HashSet::new();
+
+        loop {
+            // Remove all ϵ-productions, other than those for the start symbol.
+            // Stop iterating if no new ϵ-productions are removed in a round.
+            let mut e_prods: Vec<usize> = Vec::new();
+            for p in 0..self.productions.len() {
+                let prod = self.production(p);
+                if prod.head != self.start() && prod.is_e() {
+                    e_nts.insert(prod.head);
+                    e_prods.push(p);
+                }
+            }
+
+            if e_prods.is_empty() {
+                break;
+            }
+
+            for (i, p) in e_prods.iter().enumerate() {
+                self.productions.remove(p - i);
+            }
+
+            // For each occurrence in the body of a production of a non-terminal
+            // for which an ϵ-production has been removed, add a new production
+            // with that occurrence removed.
+            for i in 0..self.productions.len() {
+                for p in self.production(i).remove_nullable_non_terminals(&e_nts) {
+                    self.add_production(p);
+                }
+            }
+        }
+
+        // Recalculate nt_productions, since we may have removed some
+        // productions
+        self.recalculate_nt_productions();
+    }
+
     /// Returns true if the grammar is left recursive, that is, if there is a
     /// non-terminal A such that there is a derivation of A ⇒ A𝛼 for some
     /// string 𝛼.
@@ -592,6 +626,29 @@ impl Grammar {
     /// non-terminal
     pub fn productions_for_non_terminal(&self, i: usize) -> &[usize] {
         self.nt_productions.get(&i).unwrap()
+    }
+
+    /// Internal method to recalculate the non-terminal productions map
+    fn recalculate_nt_productions(&mut self) {
+        self.nt_productions = NTProductionsMap::new();
+        for i in self.symbol_table.non_terminal_ids() {
+            self.nt_productions.insert(*i, Vec::new());
+        }
+
+        for (i, p) in self.productions.iter().enumerate() {
+            self.nt_productions.get_mut(&p.head).unwrap().push(i);
+        }
+    }
+
+    /// Returns an equivalent augmented grammar with ϵ-productions removed
+    pub fn remove_e_productions(&self) -> Grammar {
+        let mut g = self.copy_core();
+
+        g.add_augmented_start();
+        g.int_remove_e_productions();
+        g.complete();
+
+        g
     }
 
     /// Returns the ID of the start symbol
@@ -1039,6 +1096,46 @@ mod test {
             (11..37).collect::<Vec<usize>>()
         ); // letter
         assert_eq!(g.productions_for_non_terminal(11), vec![9, 10]); // ID'
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_int_remove_e_simple() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let mut g = Grammar::new_from_file(&test_file_path("grammars/remove_e/ex1_before.cfg"))?;
+        g.int_remove_e_productions();
+
+        let want = Grammar::new_from_file(&test_file_path("grammars/remove_e/ex1_after.cfg"))?;
+
+        assert_eq!(g.productions, want.productions);
+        assert_eq!(g.nt_productions, want.nt_productions);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_int_remove_e_complex() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let mut g = Grammar::new_from_file(&test_file_path("grammars/remove_e/ex2_before.cfg"))?;
+        g.int_remove_e_productions();
+
+        let want = Grammar::new_from_file(&test_file_path("grammars/remove_e/ex2_after.cfg"))?;
+
+        assert_eq!(g.productions, want.productions);
+        assert_eq!(g.nt_productions, want.nt_productions);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_remove_e_productions() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let g = Grammar::new_from_file(&test_file_path("grammars/remove_e/ex3_before.cfg"))?
+            .remove_e_productions();
+
+        let want = Grammar::new_from_file(&test_file_path("grammars/remove_e/ex3_after.cfg"))?;
+
+        assert_eq!(g.productions, want.productions);
+        assert_eq!(g.nt_productions, want.nt_productions);
+        assert_eq!(g.start(), g.non_terminal_index("S'"));
 
         Ok(())
     }
