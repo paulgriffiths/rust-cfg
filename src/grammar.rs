@@ -75,50 +75,72 @@ impl Grammar {
         Ok(Grammar::new(&std::fs::read_to_string(path)?)?)
     }
 
+    /// Private method to add a new augmented start symbol and production.
+    /// Calculated fields in the grammar are not updated.
+    fn add_augmented_start(&mut self) {
+        let old_start = self.start();
+
+        self.start = self.add_non_terminal(&self.derive_primed_name(self.start));
+        self.add_production(Production {
+            head: self.start,
+            body: vec![Symbol::NonTerminal(old_start)],
+        });
+    }
+
+    /// Private method to add a new non-terminal to a grammar. Calculated
+    /// fields in the grammar are not updated.
+    fn add_non_terminal(&mut self, name: &str) -> usize {
+        self.symbol_table.add_non_terminal(name)
+    }
+
+    /// Private method to add a new production to a grammar. Calculated fields
+    /// in the grammar are not updated.
+    fn add_production(&mut self, p: Production) {
+        let head = p.head;
+        self.productions.push(p);
+        self.nt_productions
+            .insert(head, vec![self.productions.len() - 1]);
+    }
+
     /// Returns an augmented grammar, with a new start symbol S' and a new
     /// production S' → S, where S is the previous start symbol
     pub fn augment(&self) -> Grammar {
-        let mut symbol_table = self.symbol_table.deep_copy();
-        let mut productions = self.productions.clone();
-        let mut nt_productions = self.nt_productions.clone();
+        let mut augmented = self.copy_core();
 
-        // Calculate a name for the new start symbol by adding a prime to the
-        // start symbol name, and adding as many additional primes as we need
-        // until we find a name which is not already in the symbol table
-        let mut name = format!("{}'", self.non_terminal_name(self.start()));
-        while symbol_table.contains_non_terminal(&name) {
-            name.push('\'');
-        }
+        augmented.add_augmented_start();
+        augmented.complete();
 
-        // Add the new non-terminal and a new production
-        let id = symbol_table.add_non_terminal(&name);
-        productions.push(Production {
-            head: id,
-            body: vec![Symbol::NonTerminal(self.start())],
-        });
-        nt_productions.insert(id, vec![productions.len() - 1]);
+        augmented
+    }
 
+    /// Completes the calculated members of a new grammar
+    fn complete(&mut self) {
         // Recalculate FIRST and FOLLOW sets
-        let builder = firstfollow::Builder::new(&symbol_table, &productions, id);
-        let firsts = builder.firsts;
-        let follows = builder.follows;
+        let builder = firstfollow::Builder::new(&self.symbol_table, &self.productions, self.start);
+        self.firsts = builder.firsts;
+        self.follows = builder.follows;
 
-        let mut symbols: Vec<Symbol> = Vec::with_capacity(symbol_table.len());
-        for (i, s) in symbol_table.symbols().iter().enumerate() {
-            symbols.push(match s {
+        // Repopulate symbols vector from symbol table
+        self.symbols = Vec::with_capacity(self.symbol_table.len());
+        for (i, s) in self.symbol_table.symbols().iter().enumerate() {
+            self.symbols.push(match s {
                 symboltable::Symbol::Terminal(_) => Symbol::Terminal(i),
                 symboltable::Symbol::NonTerminal(_) => Symbol::NonTerminal(i),
             })
         }
+    }
 
+    /// Returns a new grammar with the core fields copied from an existing
+    /// grammar. Calculated members are not completed.
+    fn copy_core(&self) -> Grammar {
         Grammar {
-            symbol_table,
-            productions,
-            nt_productions,
-            start: id,
-            firsts,
-            follows,
-            symbols,
+            symbol_table: self.symbol_table.deep_copy(),
+            productions: self.productions.clone(),
+            nt_productions: self.nt_productions.clone(),
+            start: self.start,
+            symbols: Vec::new(),
+            firsts: FirstVector::new(),
+            follows: FollowMap::new(),
         }
     }
 
@@ -179,6 +201,18 @@ impl Grammar {
             .filter(|i| cyclic.contains(i))
             .map(|i| Symbol::NonTerminal(*i))
             .collect()
+    }
+
+    /// Calculates a name for a non-terminal by taking the name of an existing
+    /// non-terminal, and adding as many additional primes as we need to derive
+    /// a name which is not already in the symbol table
+    fn derive_primed_name(&self, nt: usize) -> String {
+        let mut name = format!("{}'", self.non_terminal_name(nt));
+        while self.symbol_table.contains_non_terminal(&name) {
+            name.push('\'');
+        }
+
+        name
     }
 
     /// Returns FIRST(symbols) where symbols is a string of grammar symbols.
