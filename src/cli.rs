@@ -5,6 +5,8 @@ pub mod derive;
 pub mod first;
 pub mod follow;
 pub mod info;
+pub mod output;
 pub mod parsetree;
 pub mod productions;
+pub mod remove_e;
 pub mod symbols;

@@ -439,6 +439,10 @@ impl Grammar {
                 self.productions.remove(p - i);
             }
 
+            // Recalculate nt_productions before we add any productions, since
+            // we may have removed some productions
+            self.recalculate_nt_productions();
+
             // For each occurrence in the body of a production of a non-terminal
             // for which an ϵ-production has been removed, add a new production
             // with that occurrence removed.
@@ -448,10 +452,6 @@ impl Grammar {
                 }
             }
         }
-
-        // Recalculate nt_productions, since we may have removed some
-        // productions
-        self.recalculate_nt_productions();
     }
 
     /// Returns true if the grammar is left recursive, that is, if there is a
@@ -1101,22 +1101,9 @@ mod test {
     }
 
     #[test]
-    fn test_int_remove_e_simple() -> std::result::Result<(), Box<dyn std::error::Error>> {
-        let mut g = Grammar::new_from_file(&test_file_path("grammars/remove_e/ex1_before.cfg"))?;
-        g.int_remove_e_productions();
-
-        let want = Grammar::new_from_file(&test_file_path("grammars/remove_e/ex1_after.cfg"))?;
-
-        assert_eq!(g.productions, want.productions);
-        assert_eq!(g.nt_productions, want.nt_productions);
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_int_remove_e_complex() -> std::result::Result<(), Box<dyn std::error::Error>> {
-        let mut g = Grammar::new_from_file(&test_file_path("grammars/remove_e/ex2_before.cfg"))?;
-        g.int_remove_e_productions();
+    fn test_remove_e_complex() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let g = Grammar::new_from_file(&test_file_path("grammars/remove_e/ex2_before.cfg"))?
+            .remove_e_productions();
 
         let want = Grammar::new_from_file(&test_file_path("grammars/remove_e/ex2_after.cfg"))?;
 
@@ -1127,7 +1114,9 @@ mod test {
     }
 
     #[test]
-    fn test_remove_e_productions() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    fn test_remove_e_sipser() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        // Test case taken from Sipser (2013) p.110
+
         let g = Grammar::new_from_file(&test_file_path("grammars/remove_e/ex3_before.cfg"))?
             .remove_e_productions();
 

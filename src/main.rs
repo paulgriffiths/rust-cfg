@@ -4,8 +4,10 @@ use cfg::cli::derive;
 use cfg::cli::first;
 use cfg::cli::follow;
 use cfg::cli::info;
+use cfg::cli::output;
 use cfg::cli::parsetree;
 use cfg::cli::productions;
+use cfg::cli::remove_e;
 use cfg::cli::symbols;
 use cfg::grammar::Grammar;
 use clap::Parser as ClapParser;
@@ -49,11 +51,14 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         Some(Commands::Productions) => {
             productions::output(&g);
         }
+        Some(Commands::RemoveE) => {
+            remove_e::output(&g);
+        }
         Some(Commands::Symbols) => {
             symbols::output(&g);
         }
         None => {
-            panic!("no command");
+            output::output(&g);
         }
     }
 
