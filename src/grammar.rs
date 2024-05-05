@@ -412,8 +412,8 @@ impl Grammar {
         out
     }
 
-    /// Private method to remove ϵ-productions for an augmented grammar
-    /// (except the ϵ-productio for the augmented start symbol, if one exists)
+    /// Private method to remove ϵ-productions from an augmented grammar
+    /// (except the ϵ-production for the augmented start symbol, if one exists)
     fn int_remove_e_productions(&mut self) {
         // Algorithm adapted from Sipser (2013) p.109
 
@@ -451,6 +451,48 @@ impl Grammar {
                     self.add_production(p);
                 }
             }
+        }
+    }
+
+    /// Private method to remove unit productions from a grammar
+    fn int_remove_unit_productions(&mut self) {
+        // Algorithm adapted from Sipser (2013) p.109
+
+        let mut removed: HashSet<Production> = HashSet::new();
+
+        'outer: loop {
+            for i in 0..self.num_productions() {
+                let prod = self.production(i);
+                if !prod.is_unit() {
+                    continue;
+                }
+
+                let head = prod.head;
+                let nt = prod.body[0].id();
+
+                // Remove the unit production and recalculate nt_productions
+                // before we add any productions
+                removed.insert(self.productions.remove(i));
+                self.recalculate_nt_productions();
+
+                // If we removed a unit production A → B, add a production A → 𝛼
+                // for every production B → 𝛼, unless A → 𝛼 was a unit production
+                // previously removed
+                for j in self.productions_for_non_terminal(nt).to_vec().clone() {
+                    let prod = self.production(j).to_head(head);
+                    if !(prod.is_unit() && removed.contains(&prod)) {
+                        self.add_production(prod);
+                    }
+                }
+
+                // Continue to the outer loop if we removed a unit production,
+                // as the number of productions in our loop expression may have
+                // changed
+                continue 'outer;
+            }
+
+            // Stop if we didn't find any unit productions on this round
+            break;
         }
     }
 
@@ -646,6 +688,16 @@ impl Grammar {
 
         g.add_augmented_start();
         g.int_remove_e_productions();
+        g.complete();
+
+        g
+    }
+
+    /// Returns an equivalent grammar with unit productions removed
+    pub fn remove_unit_productions(&self) -> Grammar {
+        let mut g = self.copy_core();
+
+        g.int_remove_unit_productions();
         g.complete();
 
         g
@@ -1125,6 +1177,32 @@ mod test {
         assert_eq!(g.productions, want.productions);
         assert_eq!(g.nt_productions, want.nt_productions);
         assert_eq!(g.start(), g.non_terminal_index("S'"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_remove_unit_simple() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let g = Grammar::new_from_file(&test_file_path("grammars/remove_unit/ex1_before.cfg"))?
+            .remove_unit_productions();
+
+        let want = Grammar::new_from_file(&test_file_path("grammars/remove_unit/ex1_after.cfg"))?;
+
+        assert_eq!(g.productions, want.productions);
+        assert_eq!(g.nt_productions, want.nt_productions);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_remove_unit_sipser() -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let g = Grammar::new_from_file(&test_file_path("grammars/remove_unit/ex2_before.cfg"))?
+            .remove_unit_productions();
+
+        let want = Grammar::new_from_file(&test_file_path("grammars/remove_unit/ex2_after.cfg"))?;
+
+        assert_eq!(g.productions, want.productions);
+        assert_eq!(g.nt_productions, want.nt_productions);
 
         Ok(())
     }

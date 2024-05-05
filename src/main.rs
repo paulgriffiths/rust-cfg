@@ -8,6 +8,7 @@ use cfg::cli::output;
 use cfg::cli::parsetree;
 use cfg::cli::productions;
 use cfg::cli::remove_e;
+use cfg::cli::remove_unit;
 use cfg::cli::symbols;
 use cfg::grammar::Grammar;
 use clap::Parser as ClapParser;
@@ -53,6 +54,9 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         }
         Some(Commands::RemoveE) => {
             remove_e::output(&g);
+        }
+        Some(Commands::RemoveUnit) => {
+            remove_unit::output(&g);
         }
         Some(Commands::Symbols) => {
             symbols::output(&g);

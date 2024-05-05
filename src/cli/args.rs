@@ -59,8 +59,10 @@ pub enum Commands {
     },
     /// Output a list of the productions in the grammar
     Productions,
-    /// Output an equivalent grammar with ϵ-productions removed
+    /// Output an equivalent augmented grammar with ϵ-productions removed
     RemoveE,
+    /// Output an equivalent grammar with unit productions removed
+    RemoveUnit,
     /// Output a list of the symbols in the grammar
     Symbols,
 }

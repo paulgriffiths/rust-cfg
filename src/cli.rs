@@ -9,4 +9,5 @@ pub mod output;
 pub mod parsetree;
 pub mod productions;
 pub mod remove_e;
+pub mod remove_unit;
 pub mod symbols;
